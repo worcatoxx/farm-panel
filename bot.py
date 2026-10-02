@@ -54,52 +54,49 @@ def solve_math_equation(text: str) -> str | None:
     if not text:
         return None
 
-    # 1. Убираем строку-подсказку вида x=* или x = *, чтобы не путать парсер
-    cleaned = re.sub(r"[xхXХ]\s*=\s*\*", "", text)
+    # Приводим любые варианты x (русские и заглавные) к английскому x
+    normalized_text = re.sub(r"[хХX]", "x", text)
 
-    # 2. Переводим в нижний регистр все вариации x
-    cleaned = re.sub(r"[хХX]", "x", cleaned)
-
-    # 3. Нормализуем все возможные варианты умножения, деления и знаков
-    # Поддерживаются: · (U+00B7), ⋅ (U+22C5), ∙ (U+2219), • (U+2022), ‧ (U+2027), × (U+00D7), ✕ (U+2715), ✖ (U+2716)
-    cleaned = re.sub(r"[·⋅∙•‧×✕✖]", "*", cleaned)
-    cleaned = re.sub(r"[:÷⁄]", "/", cleaned)
-    cleaned = re.sub(r"[−–—]", "-", cleaned)
-    cleaned = cleaned.replace("＝", "=")
-
-    # 4. Построчно ищем уравнение
-    for line in cleaned.splitlines():
+    for line in normalized_text.splitlines():
         line = line.strip()
-        if "=" not in line or "x" not in line:
+        if not line or "=" not in line or "x" not in line:
+            continue
+
+        # Пропускаем строку подсказки вроде x=* или x = *
+        if re.search(r"x\s*=\s*[\*\?]", line):
             continue
 
         parts = line.split("=")
         if len(parts) != 2:
             continue
 
-        def clean_expr(expr: str) -> str:
-            # Оставляем только допустимые математические символы
-            expr = re.sub(r"[^0-9x+\-*/().]", "", expr)
-            # Неявное умножение: "9x" -> "9*x", "x9" -> "x*9"
-            expr = re.sub(r"(\d)x", r"\1*x", expr)
-            expr = re.sub(r"x(\d)", r"x*\1", expr)
-            return expr
+        def parse_side(side: str) -> str:
+            # Знаки деления и вычитания
+            side = re.sub(r"[:÷⁄]", "/", side)
+            side = re.sub(r"[−–—]", "-", side)
+            # Любая точка, буллит, звездочка или спецсимвол между x и числом -> знак умножения *
+            side = re.sub(r"x\s*[^0-9+\-/()=]\s*(\d)", r"x*\1", side)
+            side = re.sub(r"(\d)\s*[^0-9+\-/()=]\s*x", r"\1*x", side)
+            # Неявное умножение вроде 9x или x9 -> 9*x или x*9
+            side = re.sub(r"(\d)x", r"\1*x", side)
+            side = re.sub(r"x(\d)", r"x*\1", side)
+            # Убираем кавычки цитат и лишний мусор
+            return re.sub(r"[^0-9x+\-*/().]", "", side)
 
-        left = clean_expr(parts[0])
-        right = clean_expr(parts[1])
+        left = parse_side(parts[0])
+        right = parse_side(parts[1])
 
-        # Должна присутствовать переменная x и хотя бы одна цифра
-        if not left or not right or "x" not in (left + right) or not re.search(r"\d", left + right):
+        if not left or not right or "x" not in (left + right):
             continue
 
-        # Перебираем цифру от 0 до 9
+        # Подбираем цифру от 0 до 9
         for digit in range(10):
             t_left = re.sub(r"x", str(digit), left)
             t_right = re.sub(r"x", str(digit), right)
             try:
-                val_l = eval(t_left)
-                val_r = eval(t_right)
-                if abs(val_l - val_r) < 0.0001:
+                vl = eval(t_left)
+                vr = eval(t_right)
+                if abs(vl - vr) < 0.0001:
                     return str(digit)
             except ZeroDivisionError:
                 continue
@@ -167,12 +164,12 @@ async def main():
         voucher_code = None
         raw_text = msg.text or ""
 
-        # 1. Поиск ваучера (с поддержкой символа маски *)
+        # 1. Поиск ваучера (включая маску *)
         match = re.search(r"va[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}", raw_text)
         if match:
             voucher_code = match.group(0).strip()
 
-        # 2. Поиск в моноширинном блоке кода, если регулярка выше не нашла
+        # 2. Поиск в monospace блоках
         if not voucher_code and msg.entities:
             for ent in msg.entities:
                 if isinstance(ent, (MessageEntityCode, MessageEntityPre)):
@@ -183,8 +180,9 @@ async def main():
                         voucher_code = extracted
                         break
 
-        # 3. Обработка кода
+        # 3. Обработка ваучера
         if voucher_code:
+            print(f"[DEBUG] Получен текст поста:\n{raw_text}")
             if "*" in voucher_code:
                 digit = solve_math_equation(raw_text)
                 if digit is not None:
