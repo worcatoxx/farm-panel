@@ -18,9 +18,11 @@ templates = Jinja2Templates(directory="/root/farm_panel/templates")
 
 active_logins = {}
 
+import ipaddress
+
 def get_server_ips():
     ips = []
-    # 1. Внешний IP через ipify (для серверов за 1-to-1 NAT, как Oracle Cloud)
+    # 1. Внешний IP через сервис проверки
     try:
         req = urllib.request.Request("https://api.ipify.org", headers={"User-Agent": "curl/7.68.0"})
         with urllib.request.urlopen(req, timeout=2) as resp:
@@ -30,16 +32,18 @@ def get_server_ips():
     except Exception:
         pass
 
-    # 2. Локальные интерфейсы
+    # 2. Локальные интерфейсы (игнорируем серые приватные подсети)
     try:
         out = subprocess.check_output(["ip", "-4", "-o", "addr", "show", "scope", "global"], text=True)
         for line in out.strip().splitlines():
             parts = line.split()
             if len(parts) >= 4:
-                ip = parts[3].split("/")[0]
-                if not ip.startswith("127.") and not ip.startswith("172.17.") and not ip.startswith("172.18."):
-                    if ip not in ips:
-                        ips.append(ip)
+                raw_ip = parts[3].split("/")[0]
+                ip_obj = ipaddress.ip_address(raw_ip)
+                # Добавляем адрес, только если он глобальный (не 10.x, не 192.168.x, не 127.x)
+                if not ip_obj.is_private and not ip_obj.is_loopback:
+                    if raw_ip not in ips:
+                        ips.append(raw_ip)
     except Exception:
         pass
 
