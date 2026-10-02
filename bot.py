@@ -51,37 +51,51 @@ async def keep_alive():
                 pass
 
 def solve_math_equation(text: str) -> str | None:
-    for line in text.splitlines():
+    if not text:
+        return None
+
+    # 1. Убираем строку-подсказку вида x=* или x = *, чтобы не путать парсер
+    cleaned = re.sub(r"[xхXХ]\s*=\s*\*", "", text)
+
+    # 2. Переводим в нижний регистр все вариации x
+    cleaned = re.sub(r"[хХX]", "x", cleaned)
+
+    # 3. Нормализуем все возможные варианты умножения, деления и знаков
+    # Поддерживаются: · (U+00B7), ⋅ (U+22C5), ∙ (U+2219), • (U+2022), ‧ (U+2027), × (U+00D7), ✕ (U+2715), ✖ (U+2716)
+    cleaned = re.sub(r"[·⋅∙•‧×✕✖]", "*", cleaned)
+    cleaned = re.sub(r"[:÷⁄]", "/", cleaned)
+    cleaned = re.sub(r"[−–—]", "-", cleaned)
+    cleaned = cleaned.replace("＝", "=")
+
+    # 4. Построчно ищем уравнение
+    for line in cleaned.splitlines():
         line = line.strip()
-        # Пропускаем строку x=* или строчки без знака равно
-        if "=" not in line or "x=*" in line.replace(" ", "").lower() or "х=*" in line.replace(" ", "").lower():
-            continue
-        
-        # Проверяем наличие переменной x
-        if "x" not in line.lower() and "х" not in line.lower():
+        if "=" not in line or "x" not in line:
             continue
 
         parts = line.split("=")
         if len(parts) != 2:
             continue
 
-        def sanitize_math(expr: str) -> str:
-            expr = expr.replace("·", "*").replace("×", "*").replace("•", "*")
-            expr = expr.replace(":", "/").replace("÷", "/")
-            expr = re.sub(r"[хХ]", "x", expr)
-            # Оставляем строго цифры, x и базовые операторы, выкидывая кавычки цитат
-            return re.sub(r"[^0-9x+\-*/().]", "", expr)
+        def clean_expr(expr: str) -> str:
+            # Оставляем только допустимые математические символы
+            expr = re.sub(r"[^0-9x+\-*/().]", "", expr)
+            # Неявное умножение: "9x" -> "9*x", "x9" -> "x*9"
+            expr = re.sub(r"(\d)x", r"\1*x", expr)
+            expr = re.sub(r"x(\d)", r"x*\1", expr)
+            return expr
 
-        left = sanitize_math(parts[0])
-        right = sanitize_math(parts[1])
+        left = clean_expr(parts[0])
+        right = clean_expr(parts[1])
 
-        # Должны быть цифры и переменная x
-        if not left or not right or not re.search(r"\d", left + right):
+        # Должна присутствовать переменная x и хотя бы одна цифра
+        if not left or not right or "x" not in (left + right) or not re.search(r"\d", left + right):
             continue
 
+        # Перебираем цифру от 0 до 9
         for digit in range(10):
-            t_left = re.sub(r"\bx\b|x", str(digit), left)
-            t_right = re.sub(r"\bx\b|x", str(digit), right)
+            t_left = re.sub(r"x", str(digit), left)
+            t_right = re.sub(r"x", str(digit), right)
             try:
                 val_l = eval(t_left)
                 val_r = eval(t_right)
@@ -153,12 +167,12 @@ async def main():
         voucher_code = None
         raw_text = msg.text or ""
 
-        # 1. Поиск ваучера с поддержкой символа *
+        # 1. Поиск ваучера (с поддержкой символа маски *)
         match = re.search(r"va[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}", raw_text)
         if match:
             voucher_code = match.group(0).strip()
 
-        # 2. Поиск в блоках monospace
+        # 2. Поиск в моноширинном блоке кода, если регулярка выше не нашла
         if not voucher_code and msg.entities:
             for ent in msg.entities:
                 if isinstance(ent, (MessageEntityCode, MessageEntityPre)):
@@ -169,7 +183,7 @@ async def main():
                         voucher_code = extracted
                         break
 
-        # 3. Обработка ваучера
+        # 3. Обработка кода
         if voucher_code:
             if "*" in voucher_code:
                 digit = solve_math_equation(raw_text)
