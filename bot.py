@@ -80,7 +80,7 @@ async def main():
             kwargs["local_addr"] = (target_ip, 0)
             print(f"[*] {session_name} -> БИНДИТСЯ НА IP: {target_ip}")
         else:
-            print(f"[*] {session_name} -> Основной IP (141.98.7.240)")
+            print(f"[*] {session_name} -> Основной IP")
 
         c = TelegramClient(**kwargs)
         try:
