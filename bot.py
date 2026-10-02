@@ -54,16 +54,20 @@ def solve_math_equation(text: str) -> str | None:
     if not text:
         return None
 
-    # Приводим любые варианты x (русские и заглавные) к английскому x
-    normalized_text = re.sub(r"[хХX]", "x", text)
+    # 1. Срезаем markdown форматирование Telegram (жирный шрифт **, курсив __, цитаты `)
+    clean_text = text.replace("**", "").replace("__", "").replace("`", "")
 
-    for line in normalized_text.splitlines():
+    # 2. Приводим русские и заглавные X к английской маленькой x
+    clean_text = re.sub(r"[хХX]", "x", clean_text)
+
+    # 3. Идем построчно
+    for line in clean_text.splitlines():
         line = line.strip()
         if not line or "=" not in line or "x" not in line:
             continue
 
-        # Пропускаем строку подсказки вроде x=* или x = *
-        if re.search(r"x\s*=\s*[\*\?]", line):
+        # Пропускаем строку подсказки вроде x=* или x=***
+        if re.search(r"x\s*=\s*[\*\?]+", line):
             continue
 
         parts = line.split("=")
@@ -71,17 +75,21 @@ def solve_math_equation(text: str) -> str | None:
             continue
 
         def parse_side(side: str) -> str:
-            # Знаки деления и вычитания
+            # Знаки деления и минуса
             side = re.sub(r"[:÷⁄]", "/", side)
             side = re.sub(r"[−–—]", "-", side)
-            # Любая точка, буллит, звездочка или спецсимвол между x и числом -> знак умножения *
+            # Все виды точек и буллитов переводим в знак умножения *
+            side = re.sub(r"[•·⋅∙‧×✕✖]", "*", side)
+            # Если между x и числом стоит точка или спецсимвол -> умножение
             side = re.sub(r"x\s*[^0-9+\-/()=]\s*(\d)", r"x*\1", side)
             side = re.sub(r"(\d)\s*[^0-9+\-/()=]\s*x", r"\1*x", side)
-            # Неявное умножение вроде 9x или x9 -> 9*x или x*9
+            # Неявное умножение: 9x или x9 -> 9*x или x*9
             side = re.sub(r"(\d)x", r"\1*x", side)
             side = re.sub(r"x(\d)", r"x*\1", side)
-            # Убираем кавычки цитат и лишний мусор
-            return re.sub(r"[^0-9x+\-*/().]", "", side)
+            # Оставляем только допустимые цифры и знаки
+            side = re.sub(r"[^0-9x+\-*/().]", "", side)
+            # Срезаем висящие по краям символы
+            return side.strip("+-*/.")
 
         left = parse_side(parts[0])
         right = parse_side(parts[1])
@@ -89,10 +97,10 @@ def solve_math_equation(text: str) -> str | None:
         if not left or not right or "x" not in (left + right):
             continue
 
-        # Подбираем цифру от 0 до 9
+        # Перебираем цифры от 0 до 9
         for digit in range(10):
-            t_left = re.sub(r"x", str(digit), left)
-            t_right = re.sub(r"x", str(digit), right)
+            t_left = re.sub(r"\bx\b|x", str(digit), left)
+            t_right = re.sub(r"\bx\b|x", str(digit), right)
             try:
                 vl = eval(t_left)
                 vr = eval(t_right)
@@ -164,12 +172,12 @@ async def main():
         voucher_code = None
         raw_text = msg.text or ""
 
-        # 1. Поиск ваучера (включая маску *)
+        # 1. Поиск ваучера с маской *
         match = re.search(r"va[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}", raw_text)
         if match:
             voucher_code = match.group(0).strip()
 
-        # 2. Поиск в monospace блоках
+        # 2. Поиск в моноширинных блоках Telegram
         if not voucher_code and msg.entities:
             for ent in msg.entities:
                 if isinstance(ent, (MessageEntityCode, MessageEntityPre)):
@@ -182,7 +190,7 @@ async def main():
 
         # 3. Обработка ваучера
         if voucher_code:
-            print(f"[DEBUG] Получен текст поста:\n{raw_text}")
+            print(f"[DEBUG] Пойман код: {voucher_code}")
             if "*" in voucher_code:
                 digit = solve_math_equation(raw_text)
                 if digit is not None:
