@@ -2,6 +2,7 @@ import json
 import os
 import secrets
 import subprocess
+import urllib.request
 from fastapi import FastAPI, Request, Form, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -17,10 +18,34 @@ templates = Jinja2Templates(directory="/root/farm_panel/templates")
 
 active_logins = {}
 
-AVAILABLE_IPS = [
-    {"label": "Основной IP (141.98.7.240)", "val": ""},
-    {"label": "Доп. IP (13.143.162.187)", "val": "13.143.162.187"}
-]
+def get_server_ips():
+    ips = []
+    # 1. Внешний IP через ipify (для серверов за 1-to-1 NAT, как Oracle Cloud)
+    try:
+        req = urllib.request.Request("https://api.ipify.org", headers={"User-Agent": "curl/7.68.0"})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            pub_ip = resp.read().decode("utf-8").strip()
+            if pub_ip:
+                ips.append(pub_ip)
+    except Exception:
+        pass
+
+    # 2. Локальные интерфейсы
+    try:
+        out = subprocess.check_output(["ip", "-4", "-o", "addr", "show", "scope", "global"], text=True)
+        for line in out.strip().splitlines():
+            parts = line.split()
+            if len(parts) >= 4:
+                ip = parts[3].split("/")[0]
+                if not ip.startswith("127.") and not ip.startswith("172.17.") and not ip.startswith("172.18."):
+                    if ip not in ips:
+                        ips.append(ip)
+    except Exception:
+        pass
+
+    if not ips:
+        ips = ["127.0.0.1"]
+    return ips
 
 def load_settings():
     default_settings = {
@@ -88,8 +113,16 @@ async def index(request: Request, auth_token: str = Cookie(None)):
     service_status = get_service_status()
     settings = load_settings()
 
-    primary_accs = [a for a in accounts if not a.get("bind_ip")]
-    secondary_accs = [a for a in accounts if a.get("bind_ip") == "13.143.162.187"]
+    server_ips = get_server_ips()
+    primary_ip = server_ips[0]
+    secondary_ip = server_ips[1] if len(server_ips) > 1 else None
+
+    available_ips = [{"label": f"Основной IP ({primary_ip})", "val": ""}]
+    if secondary_ip:
+        available_ips.append({"label": f"Доп. IP ({secondary_ip})", "val": secondary_ip})
+
+    primary_accs = [a for a in accounts if not a.get("bind_ip") or a.get("bind_ip") == primary_ip]
+    secondary_accs = [a for a in accounts if secondary_ip and a.get("bind_ip") == secondary_ip]
 
     return templates.TemplateResponse(
         request=request,
@@ -100,7 +133,9 @@ async def index(request: Request, auth_token: str = Cookie(None)):
             "secondary_accs": secondary_accs,
             "service_status": service_status,
             "settings": settings,
-            "available_ips": AVAILABLE_IPS
+            "available_ips": available_ips,
+            "primary_ip": primary_ip,
+            "secondary_ip": secondary_ip
         }
     )
 
@@ -248,6 +283,7 @@ async def finish_phone_login(
     accounts = load_accounts()
     accounts.append({
         "session": session_name,
+        "phone": login_data["phone"],
         "api_id": login_data["api_id"],
         "api_hash": login_data["api_hash"],
         "bind_ip": login_data["bind_ip"],
