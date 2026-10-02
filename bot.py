@@ -51,38 +51,46 @@ async def keep_alive():
                 pass
 
 def solve_math_equation(text: str) -> str | None:
-    # Ищем выражение со знаком равенства
-    match = re.search(r"([xх\d\s\+\-\*\/·×÷:()]+=\s*[xх\d\s\+\-\*\/·×÷:()]+)", text, re.IGNORECASE)
-    if not match:
-        return None
-
-    raw_eq = match.group(1).strip()
-    parts = raw_eq.split("=")
-    if len(parts) != 2:
-        return None
-
-    def normalize(expr: str) -> str:
-        expr = expr.replace("·", "*").replace("×", "*")
-        expr = expr.replace(":", "/").replace("÷", "/")
-        expr = re.sub(r"[хХ]", "x", expr)
-        return expr
-
-    left = normalize(parts[0].strip())
-    right = normalize(parts[1].strip())
-
-    # Перебор потерянной цифры от 0 до 9
-    for digit in range(10):
-        test_left = re.sub(r"\bx\b|x", str(digit), left, flags=re.IGNORECASE)
-        test_right = re.sub(r"\bx\b|x", str(digit), right, flags=re.IGNORECASE)
-        try:
-            val_left = eval(test_left)
-            val_right = eval(test_right)
-            if abs(val_left - val_right) < 0.0001:
-                return str(digit)
-        except ZeroDivisionError:
+    for line in text.splitlines():
+        line = line.strip()
+        # Пропускаем строку x=* или строчки без знака равно
+        if "=" not in line or "x=*" in line.replace(" ", "").lower() or "х=*" in line.replace(" ", "").lower():
             continue
-        except Exception:
+        
+        # Проверяем наличие переменной x
+        if "x" not in line.lower() and "х" not in line.lower():
             continue
+
+        parts = line.split("=")
+        if len(parts) != 2:
+            continue
+
+        def sanitize_math(expr: str) -> str:
+            expr = expr.replace("·", "*").replace("×", "*").replace("•", "*")
+            expr = expr.replace(":", "/").replace("÷", "/")
+            expr = re.sub(r"[хХ]", "x", expr)
+            # Оставляем строго цифры, x и базовые операторы, выкидывая кавычки цитат
+            return re.sub(r"[^0-9x+\-*/().]", "", expr)
+
+        left = sanitize_math(parts[0])
+        right = sanitize_math(parts[1])
+
+        # Должны быть цифры и переменная x
+        if not left or not right or not re.search(r"\d", left + right):
+            continue
+
+        for digit in range(10):
+            t_left = re.sub(r"\bx\b|x", str(digit), left)
+            t_right = re.sub(r"\bx\b|x", str(digit), right)
+            try:
+                val_l = eval(t_left)
+                val_r = eval(t_right)
+                if abs(val_l - val_r) < 0.0001:
+                    return str(digit)
+            except ZeroDivisionError:
+                continue
+            except Exception:
+                continue
 
     return None
 
@@ -145,12 +153,12 @@ async def main():
         voucher_code = None
         raw_text = msg.text or ""
 
-        # 1. Поиск ваучера с поддержкой символа маски *
+        # 1. Поиск ваучера с поддержкой символа *
         match = re.search(r"va[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}-[a-zA-Z0-9*]{2,10}", raw_text)
         if match:
             voucher_code = match.group(0).strip()
 
-        # 2. Поиск в блоках monospace, если регулярка текста не сработала
+        # 2. Поиск в блоках monospace
         if not voucher_code and msg.entities:
             for ent in msg.entities:
                 if isinstance(ent, (MessageEntityCode, MessageEntityPre)):
@@ -161,15 +169,16 @@ async def main():
                         voucher_code = extracted
                         break
 
-        # 3. Обработка найденного кода
+        # 3. Обработка ваучера
         if voucher_code:
             if "*" in voucher_code:
                 digit = solve_math_equation(raw_text)
                 if digit is not None:
                     voucher_code = voucher_code.replace("*", digit)
-                    print(f"[⚡] Решено уравнение: x = {digit}! Итоговый ваучер: {voucher_code}")
+                    print(f"[⚡] Решено: x = {digit}! Итоговый ваучер: {voucher_code}")
                 else:
-                    print(f"[!] Не удалось решить уравнение для ваучера {voucher_code}")
+                    print(f"[ERR] Не удалось решить пример для {voucher_code}. Отправка отменена!")
+                    return
 
             print(f"\n[!] ПОЙМАН ВАУЧЕР: {voucher_code}. Залп со всех {len(clients)} аккаунтов...")
             await asyncio.gather(*(send_to_bot(client, target_bot, voucher_code) for client in clients))
