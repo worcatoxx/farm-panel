@@ -16,6 +16,29 @@
             }
         }
     </script>
+    <style>
+        /* Аккуратный темный скроллбар */
+        ::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d16;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+            border: 1px solid #334155;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #38bdf8;
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #1e293b #090d16;
+        }
+    </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
     <div class="max-w-7xl mx-auto p-6">
@@ -78,11 +101,11 @@
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1">API ID</label>
-                                <input name="api_id" placeholder="2040" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                                <input name="api_id" value="2040" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
                             </div>
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1">API Hash</label>
-                                <input name="api_hash" placeholder="b18441..." required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                                <input name="api_hash" value="b18441a1ff607e10a989891a54a3b9d6" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
                             </div>
                         </div>
                         <div>
@@ -98,7 +121,7 @@
                 </div>
             </div>
 
-            <!-- Правая колонка: Блоки IP и консоль -->
+            <!-- Правая колонка: Блоки IP и консоль логов -->
             <div class="lg:col-span-2 flex flex-col gap-6">
                 <!-- Карточка Основного IP -->
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
@@ -123,7 +146,7 @@
                                     {% for acc in primary_accs %}
                                     <tr class="hover:bg-slate-800/30">
                                         <td class="py-2.5 font-medium text-slate-200">{{ acc.session }}</td>
-                                        <td class="py-2.5 font-mono text-slate-400">{{ acc.phone or '-' }}</td>
+                                        <td class="py-2.5 font-mono text-sky-400">{{ acc.phone or '-' }}</td>
                                         <td class="py-2.5 text-right">
                                             <form action="/delete" method="post" onsubmit="return confirm('Удалить аккаунт?')">
                                                 <input type="hidden" name="session_name" value="{{ acc.session }}">
@@ -140,7 +163,7 @@
                     {% endif %}
                 </div>
 
-                <!-- Карточка Дополнительного IP (показывается ТОЛЬКО если есть 2-й IP) -->
+                <!-- Карточка Дополнительного IP -->
                 {% if secondary_ip %}
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
                     <div class="flex justify-between items-center mb-4">
@@ -164,7 +187,7 @@
                                     {% for acc in secondary_accs %}
                                     <tr class="hover:bg-slate-800/30">
                                         <td class="py-2.5 font-medium text-slate-200">{{ acc.session }}</td>
-                                        <td class="py-2.5 font-mono text-slate-400">{{ acc.phone or '-' }}</td>
+                                        <td class="py-2.5 font-mono text-sky-400">{{ acc.phone or '-' }}</td>
                                         <td class="py-2.5 text-right">
                                             <form action="/delete" method="post" onsubmit="return confirm('Удалить аккаунт?')">
                                                 <input type="hidden" name="session_name" value="{{ acc.session }}">
@@ -182,16 +205,16 @@
                 </div>
                 {% endif %}
 
-                <!-- Консоль логов -->
+                <!-- Консоль логов с ручкой изменения размера -->
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
                     <div class="flex justify-between items-center mb-3">
                         <div class="flex items-center gap-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                             <span class="text-xs font-semibold text-slate-300 uppercase">Служба farmbot: live journal</span>
                         </div>
-                        <button onclick="fetchLogs()" class="text-xs text-sky-400 hover:underline">Обновить</button>
+                        <button onclick="fetchLogs(true)" class="text-xs text-sky-400 hover:underline">Обновить</button>
                     </div>
-                    <div id="logs" class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[11px] font-mono text-emerald-400 h-44 overflow-y-auto whitespace-pre-wrap leading-relaxed">Загрузка логов...</div>
+                    <div id="logs" class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[11px] font-mono text-emerald-400 h-52 overflow-y-auto whitespace-pre-wrap leading-relaxed" style="resize: vertical; min-height: 140px; max-height: 800px;">Загрузка логов...</div>
                 </div>
             </div>
         </main>
@@ -236,13 +259,21 @@
             }
         }
 
-        async function fetchLogs() {
+        async function fetchLogs(forceScroll = false) {
             try {
                 const res = await fetch('/api/logs');
                 const data = await res.json();
                 const el = document.getElementById('logs');
+                
+                // Проверяем, находится ли пользователь в самом низу логов (с запасом 40px)
+                const isAtBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 40;
+                
                 el.innerText = data.logs || 'Логи отсутствуют';
-                el.scrollTop = el.scrollHeight;
+                
+                // Прокручиваем только если юзер сам не листал наверх или нажал "Обновить"
+                if (isAtBottom || forceScroll) {
+                    el.scrollTop = el.scrollHeight;
+                }
             } catch (e) {
                 document.getElementById('logs').innerText = 'Ошибка получения логов';
             }
@@ -253,8 +284,8 @@
             switchTab('settings');
         }
 
-        fetchLogs();
-        setInterval(fetchLogs, 5000);
+        fetchLogs(true);
+        setInterval(() => fetchLogs(false), 5000);
     </script>
 </body>
 </html>
