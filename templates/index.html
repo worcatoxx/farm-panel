@@ -3,306 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FarmBot Console</title>
+    <title>FarmBot Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
-    </style>
     <script>
-        function switchView(view) {
-            const isSettings = view === 'settings';
-            document.getElementById('view-main').classList.toggle('hidden', isSettings);
-            document.getElementById('view-settings').classList.toggle('hidden', !isSettings);
-            
-            document.getElementById('nav-main').className = !isSettings ? 
-                'px-4 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 transition' : 
-                'px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition';
-                
-            document.getElementById('nav-settings').className = isSettings ? 
-                'px-4 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 transition' : 
-                'px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition';
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#0f172a', 900: '#0b1120', 950: '#060913' }
+                    }
+                }
+            }
         }
+    </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- Шапка -->
+        <header class="flex justify-between items-center pb-6 mb-6 border-b border-slate-800">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 font-bold">⚡</div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold tracking-tight">FarmBot Dashboard</h1>
+                        <span class="text-xs bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full">by wcatox</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Разделение аккаунтов по IP-адресам сервера</p>
+                </div>
+            </div>
 
-        async function switchIp(sessionName, newIp) {
-            const form = new FormData();
-            form.append("session_name", sessionName);
-            form.append("bind_ip", newIp);
-            await fetch("/account/update-ip", { method: "POST", body: form });
-            window.location.reload();
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg">
+                    <button onclick="switchTab('main')" id="tab-btn-main" class="px-3 py-1.5 text-xs font-medium rounded-md bg-sky-600 text-white transition">Главная</button>
+                    <button onclick="switchTab('settings')" id="tab-btn-settings" class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition">Настройки</button>
+                </div>
+                
+                <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
+                    <span class="w-2 h-2 rounded-full {% if service_status == 'active' %}bg-emerald-500 animate-pulse{% else %}bg-amber-500{% endif %}"></span>
+                    <span class="uppercase font-semibold text-slate-300">{{ service_status }}</span>
+                </div>
+
+                <form action="/service/restart" method="post">
+                    <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Перезапуск
+                    </button>
+                </form>
+
+                <form action="/service/start" method="post">
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition">Старт</button>
+                </form>
+
+                <a href="/logout" class="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition" title="Выход">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                </a>
+            </div>
+        </header>
+
+        <!-- Вкладка: Главная -->
+        <main id="tab-main" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Левая колонка: Форма добавления -->
+            <div class="lg:col-span-1">
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Добавить аккаунт</h2>
+                    <form action="/start-phone-login" method="post" class="flex flex-col gap-3">
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Имя профиля</label>
+                            <input name="session_name" placeholder="account_1" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Номер телефона</label>
+                            <input name="phone" placeholder="+1234567890" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-slate-400 block mb-1">API ID</label>
+                                <input name="api_id" placeholder="2040" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-400 block mb-1">API Hash</label>
+                                <input name="api_hash" placeholder="b18441..." required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Исходящий IP сервера</label>
+                            <select name="bind_ip" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                                {% for ip in available_ips %}
+                                    <option value="{{ ip.val }}">{{ ip.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="mt-2 w-full bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition text-white">Получить код в Telegram</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Правая колонка: Блоки IP и консоль -->
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                <!-- Карточка Основного IP -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                            <span class="text-sm font-semibold tracking-wide uppercase">Основной IP: <span class="text-amber-400 font-mono">{{ primary_ip }}</span></span>
+                        </div>
+                        <span class="text-xs bg-slate-800 px-2.5 py-1 rounded-md text-slate-400">Ботов: {{ primary_accs|length }}</span>
+                    </div>
+                    {% if primary_accs %}
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="text-slate-400 border-b border-slate-800">
+                                        <th class="pb-2">Сессия</th>
+                                        <th class="pb-2">Телефон</th>
+                                        <th class="pb-2 text-right">Действие</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/60">
+                                    {% for acc in primary_accs %}
+                                    <tr class="hover:bg-slate-800/30">
+                                        <td class="py-2.5 font-medium text-slate-200">{{ acc.session }}</td>
+                                        <td class="py-2.5 font-mono text-slate-400">{{ acc.phone or '-' }}</td>
+                                        <td class="py-2.5 text-right">
+                                            <form action="/delete" method="post" onsubmit="return confirm('Удалить аккаунт?')">
+                                                <input type="hidden" name="session_name" value="{{ acc.session }}">
+                                                <button type="submit" class="text-rose-400 hover:text-rose-300 font-medium">Удалить</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6 text-xs text-slate-400">Нет аккаунтов на этом адресе</div>
+                    {% endif %}
+                </div>
+
+                <!-- Карточка Дополнительного IP (показывается ТОЛЬКО если есть 2-й IP) -->
+                {% if secondary_ip %}
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
+                            <span class="text-sm font-semibold tracking-wide uppercase">Дополнительный IP: <span class="text-blue-400 font-mono">{{ secondary_ip }}</span></span>
+                        </div>
+                        <span class="text-xs bg-slate-800 px-2.5 py-1 rounded-md text-slate-400">Ботов: {{ secondary_accs|length }}</span>
+                    </div>
+                    {% if secondary_accs %}
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="text-slate-400 border-b border-slate-800">
+                                        <th class="pb-2">Сессия</th>
+                                        <th class="pb-2">Телефон</th>
+                                        <th class="pb-2 text-right">Действие</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/60">
+                                    {% for acc in secondary_accs %}
+                                    <tr class="hover:bg-slate-800/30">
+                                        <td class="py-2.5 font-medium text-slate-200">{{ acc.session }}</td>
+                                        <td class="py-2.5 font-mono text-slate-400">{{ acc.phone or '-' }}</td>
+                                        <td class="py-2.5 text-right">
+                                            <form action="/delete" method="post" onsubmit="return confirm('Удалить аккаунт?')">
+                                                <input type="hidden" name="session_name" value="{{ acc.session }}">
+                                                <button type="submit" class="text-rose-400 hover:text-rose-300 font-medium">Удалить</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6 text-xs text-slate-400">Нет аккаунтов на этом адресе</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Консоль логов -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                            <span class="text-xs font-semibold text-slate-300 uppercase">Служба farmbot: live journal</span>
+                        </div>
+                        <button onclick="fetchLogs()" class="text-xs text-sky-400 hover:underline">Обновить</button>
+                    </div>
+                    <div id="logs" class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[11px] font-mono text-emerald-400 h-44 overflow-y-auto whitespace-pre-wrap leading-relaxed">Загрузка логов...</div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Вкладка: Настройки -->
+        <main id="tab-settings" class="hidden max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
+            <h2 class="text-base font-bold mb-4">Системные настройки</h2>
+            <form action="/settings/save" method="post" class="flex flex-col gap-4">
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Логин администратора</label>
+                    <input name="admin_user" value="{{ settings.admin_user }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Пароль администратора</label>
+                    <input name="admin_pass" value="{{ settings.admin_pass }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Канал перехвата (источник)</label>
+                    <input name="source_channel" value="{{ settings.source_channel }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Целевой бот для активации</label>
+                    <input name="target_bot" value="{{ settings.target_bot }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                </div>
+                <button type="submit" class="mt-2 bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition text-white">Сохранить настройки</button>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        function switchTab(tab) {
+            if (tab === 'main') {
+                document.getElementById('tab-main').classList.remove('hidden');
+                document.getElementById('tab-settings').classList.add('hidden');
+                document.getElementById('tab-btn-main').className = 'px-3 py-1.5 text-xs font-medium rounded-md bg-sky-600 text-white transition';
+                document.getElementById('tab-btn-settings').className = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition';
+            } else {
+                document.getElementById('tab-main').classList.add('hidden');
+                document.getElementById('tab-settings').classList.remove('hidden');
+                document.getElementById('tab-btn-main').className = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition';
+                document.getElementById('tab-btn-settings').className = 'px-3 py-1.5 text-xs font-medium rounded-md bg-sky-600 text-white transition';
+            }
         }
 
         async function fetchLogs() {
             try {
                 const res = await fetch('/api/logs');
                 const data = await res.json();
-                const logBox = document.getElementById('log-box');
-                if (logBox) {
-                    logBox.textContent = data.logs;
-                    logBox.scrollTop = logBox.scrollHeight;
-                }
-            } catch (err) {}
-        }
-        setInterval(fetchLogs, 2500);
-        window.onload = () => {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('tab') === 'settings') {
-                switchView('settings');
+                const el = document.getElementById('logs');
+                el.innerText = data.logs || 'Логи отсутствуют';
+                el.scrollTop = el.scrollHeight;
+            } catch (e) {
+                document.getElementById('logs').innerText = 'Ошибка получения логов';
             }
-            fetchLogs();
-        };
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('tab') === 'settings') {
+            switchTab('settings');
+        }
+
+        fetchLogs();
+        setInterval(fetchLogs, 5000);
     </script>
-</head>
-<body class="bg-[#090d16] text-slate-100 min-h-screen p-6 md:p-10 flex flex-col justify-between">
-    <div class="max-w-6xl mx-auto w-full space-y-8">
-        
-        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-            <div class="flex items-center gap-6">
-                <div class="flex items-center gap-3">
-                    <span class="inline-flex items-center justify-center p-2.5 bg-sky-500/10 border border-sky-500/20 rounded-xl text-sky-400 shadow-inner">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                    </span>
-                    <div>
-                        <div class="flex items-center gap-2.5">
-                            <h1 class="text-2xl font-bold tracking-tight text-white">FarmBot Dashboard</h1>
-                            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gradient-to-r from-sky-500/20 to-indigo-500/20 text-sky-300 border border-sky-500/30">
-                                by wcatox
-                            </span>
-                        </div>
-                        <p class="text-xs text-slate-400 mt-0.5">Разделение аккаунтов по IP-адресам сервера</p>
-                    </div>
-                </div>
-
-                <nav class="flex items-center gap-2 p-1 bg-slate-950/80 rounded-2xl border border-slate-800/80">
-                    <button id="nav-main" onclick="switchView('main')" class="px-4 py-2 rounded-xl text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 transition">Главная</button>
-                    <button id="nav-settings" onclick="switchView('settings')" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition">Настройки</button>
-                </nav>
-            </div>
-
-            <div class="flex items-center gap-3">
-                <div class="flex items-center gap-3 glass p-2 rounded-xl">
-                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                        <span class="relative flex h-2.5 w-2.5">
-                            {% if service_status == 'active' %}
-                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                            {% else %}
-                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                            {% endif %}
-                        </span>
-                        <span class="text-xs font-mono uppercase font-semibold text-slate-300">{{ service_status }}</span>
-                    </div>
-
-                    <form action="/service/restart" method="post">
-                        <button class="bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-sky-600/20">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            Перезапуск
-                        </button>
-                    </form>
-                    {% if service_status == 'active' %}
-                    <form action="/service/stop" method="post">
-                        <button class="bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 px-3 py-1.5 rounded-lg text-xs font-semibold transition">Стоп</button>
-                    </form>
-                    {% else %}
-                    <form action="/service/start" method="post">
-                        <button class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition">Старт</button>
-                    </form>
-                    {% endif %}
-                </div>
-
-                <a href="/logout" title="Выйти" class="glass p-3 rounded-xl text-slate-400 hover:text-rose-400 hover:border-rose-500/30 transition">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                </a>
-            </div>
-        </header>
-
-        <main id="view-main" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <!-- Левая колонка: форма добавления -->
-            <div class="lg:col-span-5 space-y-6">
-                <div class="glass p-6 rounded-2xl shadow-xl">
-                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4">Добавить аккаунт</h2>
-
-                    <form action="/start-phone-login" method="post" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Имя профиля</label>
-                            <input name="session_name" placeholder="account_4" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition placeholder-slate-600">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Номер телефона</label>
-                            <input name="phone" placeholder="+1234567890" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition placeholder-slate-600 font-mono">
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1">API ID</label>
-                                <input name="api_id" type="number" value="2040" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition font-mono">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1">API Hash</label>
-                                <input name="api_hash" value="b18441a1ff607e10a989891a5462e627" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition font-mono">
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Исходящий IP сервера</label>
-                            <select name="bind_ip" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:border-sky-500 outline-none">
-                                <option value="">Основной IP (141.98.7.240)</option>
-                                <option value="13.143.162.187">Доп. IP (13.143.162.187)</option>
-                            </select>
-                        </div>
-
-                        <button type="submit" class="w-full bg-sky-500 hover:bg-sky-400 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg shadow-sky-500/20">
-                            Получить код в Telegram
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Правая колонка: списки разделенные по IP и консоль логов -->
-            <div class="lg:col-span-7 space-y-6">
-                
-                <!-- ГРУППА 1: ОСНОВНОЙ IP -->
-                <div class="glass p-5 rounded-2xl shadow-xl space-y-3">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50"></span>
-                            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Основной IP: <span class="font-mono text-amber-400">141.98.7.240</span></h2>
-                        </div>
-                        <span class="text-[11px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded-md border border-slate-700">Ботов: {{ primary_accs|length }}</span>
-                    </div>
-
-                    <div class="space-y-2">
-                        {% for acc in primary_accs %}
-                        <div class="flex items-center justify-between p-3 bg-slate-950/70 rounded-xl border border-slate-800/80">
-                            <div class="flex items-center gap-3">
-                                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-                                <span class="font-semibold text-white text-sm font-mono">{{ acc.session }}</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button onclick="switchIp('{{ acc.session }}', '13.143.162.187')" title="Перенести на Доп. IP" class="text-xs text-sky-400 hover:bg-sky-500/10 border border-sky-500/30 px-2.5 py-1 rounded-lg transition">
-                                    Перенести на 13.143...
-                                </button>
-                                <form action="/delete" method="post" onsubmit="return confirm('Удалить {{ acc.session }}?');" class="m-0">
-                                    <input type="hidden" name="session_name" value="{{ acc.session }}">
-                                    <button type="submit" class="text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="text-xs text-slate-500 py-2 text-center">Нет аккаунтов на этом адресе</div>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- ГРУППА 2: ДОПОЛНИТЕЛЬНЫЙ IP -->
-                <div class="glass p-5 rounded-2xl shadow-xl space-y-3">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 shadow-sm shadow-indigo-400/50"></span>
-                            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Дополнительный IP: <span class="font-mono text-indigo-400">13.143.162.187</span></h2>
-                        </div>
-                        <span class="text-[11px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded-md border border-slate-700">Ботов: {{ secondary_accs|length }}</span>
-                    </div>
-
-                    <div class="space-y-2">
-                        {% for acc in secondary_accs %}
-                        <div class="flex items-center justify-between p-3 bg-slate-950/70 rounded-xl border border-slate-800/80">
-                            <div class="flex items-center gap-3">
-                                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-                                <span class="font-semibold text-white text-sm font-mono">{{ acc.session }}</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button onclick="switchIp('{{ acc.session }}', '')" title="Вернуть на Основной IP" class="text-xs text-amber-400 hover:bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg transition">
-                                    Вернуть на 141.98...
-                                </button>
-                                <form action="/delete" method="post" onsubmit="return confirm('Удалить {{ acc.session }}?');" class="m-0">
-                                    <input type="hidden" name="session_name" value="{{ acc.session }}">
-                                    <button type="submit" class="text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="text-xs text-slate-500 py-2 text-center">Нет аккаунтов на этом адресе</div>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <!-- Логи -->
-                <div class="glass p-5 rounded-2xl space-y-3 shadow-xl">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <div class="w-3 h-3 rounded-full bg-rose-500/80"></div>
-                            <div class="w-3 h-3 rounded-full bg-amber-500/80"></div>
-                            <div class="w-3 h-3 rounded-full bg-emerald-500/80"></div>
-                            <span class="text-xs font-mono text-slate-400 ml-2">Служба farmbot: live journal</span>
-                        </div>
-                        <button onclick="fetchLogs()" class="text-xs text-slate-400 hover:text-white transition">Обновить</button>
-                    </div>
-                    <pre id="log-box" class="bg-slate-950 font-mono text-[11px] text-emerald-400/90 p-4 rounded-xl h-52 overflow-y-auto leading-relaxed border border-slate-900 whitespace-pre-wrap">Загрузка логов...</pre>
-                </div>
-            </div>
-        </main>
-
-        <div id="view-settings" class="max-w-2xl mx-auto w-full hidden">
-            <div class="glass p-8 rounded-2xl shadow-2xl space-y-6">
-                <div>
-                    <h2 class="text-xl font-bold text-white tracking-tight">Параметры системы</h2>
-                    <p class="text-xs text-slate-400 mt-1">Настройки доступа и цели перехвата</p>
-                </div>
-
-                <form action="/settings/save" method="post" class="space-y-6">
-                    <div class="space-y-4">
-                        <h3 class="text-xs font-semibold uppercase tracking-wider text-sky-400">Доступ к панели управления</h3>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1.5">Логин администратора</label>
-                                <input name="admin_user" value="{{ settings.admin_user }}" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1.5">Новый пароль</label>
-                                <input name="admin_pass" value="{{ settings.admin_pass }}" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="space-y-4 pt-4 border-t border-slate-800/80">
-                        <h3 class="text-xs font-semibold uppercase tracking-wider text-sky-400">Каналы и Боты Телеграм</h3>
-                        <div class="space-y-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1.5">Канал источник</label>
-                                <div class="relative flex items-center">
-                                    <span class="absolute left-3.5 text-sm text-slate-500">@</span>
-                                    <input name="source_channel" value="{{ settings.source_channel }}" required class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition font-mono">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1.5">Целевой бот</label>
-                                <div class="relative flex items-center">
-                                    <span class="absolute left-3.5 text-sm text-slate-500">@</span>
-                                    <input name="target_bot" value="{{ settings.target_bot }}" required class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3.5 py-2 text-sm text-white focus:border-sky-500 outline-none transition font-mono">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between">
-                        <button type="submit" class="bg-sky-500 hover:bg-sky-400 text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition shadow-lg shadow-sky-500/20">
-                            Сохранить настройки
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-    </div>
-
-    <footer class="mt-8 text-center text-xs text-slate-500">
-        Разработано <span class="text-sky-400 font-medium">wcatox</span> • FarmBot Panel v2.5
-    </footer>
 </body>
 </html>
