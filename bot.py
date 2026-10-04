@@ -9,6 +9,7 @@ CONFIG_FILE = "/root/farm_panel/accounts.json"
 SETTINGS_FILE = "/root/farm_panel/config.json"
 
 clients = []
+target_peers = {}
 
 def load_settings():
     default_settings = {
@@ -32,41 +33,54 @@ def load_accounts():
     except Exception:
         return []
 
+async def init_client_target(client: TelegramClient, target_bot: str):
+    """Заранее резолвит бота в память сессии, чтобы отправка была мгновенной"""
+    try:
+        peer = await client.get_input_entity(target_bot)
+        target_peers[client] = peer
+    except Exception as e:
+        print(f"[!] Не удалось закэшировать бота для сессии: {e}")
+
 async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
     try:
-        await client.send_message(target_bot, code)
+        # Отправляем сразу в закэшированный Peer без поиска по юзернейму
+        peer = target_peers.get(client, target_bot)
+        await client.send_message(peer, code)
         me = await client.get_me()
-        print(f"[OK] {me.first_name} (@{me.username}) отправил код в @{target_bot}: {code}")
+        print(f"[OK] {me.first_name} (@{me.username}) отправил код: {code}")
     except Exception as e:
         print(f"[ERR] Ошибка отправки: {e}")
 
+async def ping_client(client: TelegramClient):
+    try:
+        if client.is_connected():
+            await client.get_me()
+        else:
+            await client.connect()
+    except Exception:
+        pass
+
 async def keep_alive():
+    """Каждые 15 секунд параллельно проверяет все сессии, не давая сокетам уснуть"""
     while True:
-        await asyncio.sleep(30)
-        for c in clients:
-            try:
-                if c.is_connected():
-                    await c.get_me()
-            except Exception:
-                pass
+        await asyncio.sleep(15)
+        if clients:
+            await asyncio.gather(*(ping_client(c) for c in clients), return_exceptions=True)
 
 def solve_math_equation(text: str) -> str | None:
     if not text:
         return None
 
-    # 1. Срезаем markdown форматирование Telegram (жирный шрифт **, курсив __, цитаты `)
+    # Срезаем markdown форматирование Telegram
     clean_text = text.replace("**", "").replace("__", "").replace("`", "")
-
-    # 2. Приводим русские и заглавные X к английской маленькой x
     clean_text = re.sub(r"[хХX]", "x", clean_text)
 
-    # 3. Идем построчно
     for line in clean_text.splitlines():
         line = line.strip()
         if not line or "=" not in line or "x" not in line:
             continue
 
-        # Пропускаем строку подсказки вроде x=* или x=***
+        # Пропускаем строку подсказки вроде x=*
         if re.search(r"x\s*=\s*[\*\?]+", line):
             continue
 
@@ -75,20 +89,14 @@ def solve_math_equation(text: str) -> str | None:
             continue
 
         def parse_side(side: str) -> str:
-            # Знаки деления и минуса
             side = re.sub(r"[:÷⁄]", "/", side)
             side = re.sub(r"[−–—]", "-", side)
-            # Все виды точек и буллитов переводим в знак умножения *
             side = re.sub(r"[•·⋅∙‧×✕✖]", "*", side)
-            # Если между x и числом стоит точка или спецсимвол -> умножение
             side = re.sub(r"x\s*[^0-9+\-/()=]\s*(\d)", r"x*\1", side)
             side = re.sub(r"(\d)\s*[^0-9+\-/()=]\s*x", r"\1*x", side)
-            # Неявное умножение: 9x или x9 -> 9*x или x*9
             side = re.sub(r"(\d)x", r"\1*x", side)
             side = re.sub(r"x(\d)", r"x*\1", side)
-            # Оставляем только допустимые цифры и знаки
             side = re.sub(r"[^0-9x+\-*/().]", "", side)
-            # Срезаем висящие по краям символы
             return side.strip("+-*/.")
 
         left = parse_side(parts[0])
@@ -97,7 +105,6 @@ def solve_math_equation(text: str) -> str | None:
         if not left or not right or "x" not in (left + right):
             continue
 
-        # Перебираем цифры от 0 до 9
         for digit in range(10):
             t_left = re.sub(r"\bx\b|x", str(digit), left)
             t_right = re.sub(r"\bx\b|x", str(digit), right)
@@ -135,11 +142,13 @@ async def main():
             "auto_reconnect": True,
             "connection_retries": -1,
             "retry_delay": 1,
-            "timeout": 15
+            "timeout": 8
         }
 
         if bind_ip and str(bind_ip).strip():
             target_ip = str(bind_ip).strip()
+            if ":" in target_ip:
+                kwargs["use_ipv6"] = True
             kwargs["local_addr"] = (target_ip, 0)
             print(f"[*] {session_name} -> Биндится на IP: {target_ip}")
         else:
@@ -163,6 +172,10 @@ async def main():
 
     if not clients:
         return
+
+    print("[*] Прогреваем кэш целевого бота для мгновенного залпа...")
+    await asyncio.gather(*(init_client_target(c, target_bot) for c in clients), return_exceptions=True)
+    print("[✓] Бот закэширован во всех сессиях")
 
     listener = clients[0]
 
@@ -188,9 +201,8 @@ async def main():
                         voucher_code = extracted
                         break
 
-        # 3. Обработка ваучера
+        # 3. Обработка кода
         if voucher_code:
-            print(f"[DEBUG] Пойман код: {voucher_code}")
             if "*" in voucher_code:
                 digit = solve_math_equation(raw_text)
                 if digit is not None:
@@ -200,7 +212,7 @@ async def main():
                     print(f"[ERR] Не удалось решить пример для {voucher_code}. Отправка отменена!")
                     return
 
-            print(f"\n[!] ПОЙМАН ВАУЧЕР: {voucher_code}. Залп со всех {len(clients)} аккаунтов...")
+            print(f"\n[!] ПОЙМАН ВАУЧЕР: {voucher_code}. Мгновенный залп со всех {len(clients)} аккаунтов...")
             await asyncio.gather(*(send_to_bot(client, target_bot, voucher_code) for client in clients))
 
     asyncio.create_task(keep_alive())
