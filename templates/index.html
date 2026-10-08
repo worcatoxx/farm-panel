@@ -17,33 +17,17 @@
         }
     </script>
     <style>
-        /* Аккуратный темный скроллбар */
-        ::-webkit-scrollbar {
-            width: 7px;
-            height: 7px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #090d16;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #1e293b;
-            border-radius: 4px;
-            border: 1px solid #334155;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #38bdf8;
-        }
-        * {
-            scrollbar-width: thin;
-            scrollbar-color: #1e293b #090d16;
-        }
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
+        ::-webkit-scrollbar-track { background: #090d16; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; border: 1px solid #334155; }
+        ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+        * { scrollbar-width: thin; scrollbar-color: #1e293b #090d16; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
     <div class="max-w-7xl mx-auto p-6">
         <!-- Шапка -->
-        <header class="flex justify-between items-center pb-6 mb-6 border-b border-slate-800">
+        <header class="flex flex-wrap justify-between items-center gap-4 pb-6 mb-6 border-b border-slate-800">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 font-bold">⚡</div>
                 <div>
@@ -51,11 +35,21 @@
                         <h1 class="text-xl font-bold tracking-tight">FarmBot Dashboard</h1>
                         <span class="text-xs bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full">by wcatox</span>
                     </div>
-                    <p class="text-xs text-slate-400">Разделение аккаунтов по IP-адресам сервера</p>
+                    <p class="text-xs text-slate-400">Хост: <span class="text-sky-400 font-mono">{{ current_display_host }}</span></p>
                 </div>
             </div>
 
-            <div class="flex items-center gap-3">
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Меню выбора VPS -->
+                <div class="relative">
+                    <select onchange="if(this.value) window.open(this.value, '_blank')" class="bg-slate-900 border border-slate-700 text-sky-400 text-xs rounded-lg px-3 py-1.5 outline-none font-medium cursor-pointer hover:border-sky-500 transition">
+                        <option value="">🖥️ Текущий VPS (Этот сервер)</option>
+                        {% for node in linked_nodes %}
+                            <option value="{{ node.url }}">🔗 {{ node.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
                 <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg">
                     <button onclick="switchTab('main')" id="tab-btn-main" class="px-3 py-1.5 text-xs font-medium rounded-md bg-sky-600 text-white transition">Главная</button>
                     <button onclick="switchTab('settings')" id="tab-btn-settings" class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-400 hover:text-white transition">Настройки</button>
@@ -66,15 +60,18 @@
                     <span class="uppercase font-semibold text-slate-300">{{ service_status }}</span>
                 </div>
 
+                <!-- Рестарт текущего -->
                 <form action="/service/restart" method="post">
-                    <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        Перезапуск
+                    <button type="submit" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-slate-700">
+                        Рестарт
                     </button>
                 </form>
 
-                <form action="/service/start" method="post">
-                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition">Старт</button>
+                <!-- Рестарт всех серверов вместе -->
+                <form action="/service/restart-all" method="post">
+                    <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow-sm shadow-sky-900" title="Перезапустит этого бота и пошлет сигнал всем привязанным VPS">
+                        ⚡ Рестарт всех VPS
+                    </button>
                 </form>
 
                 <a href="/logout" class="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition" title="Выход">
@@ -85,7 +82,6 @@
 
         <!-- Вкладка: Главная -->
         <main id="tab-main" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Левая колонка: Форма добавления -->
             <div class="lg:col-span-1">
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
                     <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Добавить аккаунт</h2>
@@ -121,7 +117,6 @@
                 </div>
             </div>
 
-            <!-- Правая колонка: Блоки IP и консоль логов -->
             <div class="lg:col-span-2 flex flex-col gap-6">
                 <!-- Карточка Основного IP -->
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
@@ -205,7 +200,7 @@
                 </div>
                 {% endif %}
 
-                <!-- Консоль логов с ручкой изменения размера -->
+                <!-- Консоль логов -->
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
                     <div class="flex justify-between items-center mb-3">
                         <div class="flex items-center gap-2">
@@ -224,12 +219,24 @@
             <h2 class="text-base font-bold mb-4">Системные настройки</h2>
             <form action="/settings/save" method="post" class="flex flex-col gap-4">
                 <div>
-                    <label class="text-xs text-slate-400 block mb-1">Логин администратора</label>
-                    <input name="admin_user" value="{{ settings.admin_user }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                    <label class="text-xs text-slate-400 block mb-1">Свой домен (опционально, иначе IP)</label>
+                    <input name="custom_domain" value="{{ settings.custom_domain or '' }}" placeholder="mysite.ru:8080 или panel.mysite.ru" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                    <span class="text-[10px] text-slate-500 block mt-1">Оставь пустым, если хочешь показывать стандартный IP.</span>
                 </div>
                 <div>
-                    <label class="text-xs text-slate-400 block mb-1">Пароль администратора</label>
-                    <input name="admin_pass" value="{{ settings.admin_pass }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                    <label class="text-xs text-slate-400 block mb-1">Привязка других VPS к этой панели</label>
+                    <textarea name="linked_nodes" rows="3" placeholder="VPS 2 | http://158.180.34.166:8080 | admin | superpass123" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">{{ settings.linked_nodes or '' }}</textarea>
+                    <span class="text-[10px] text-slate-500 block mt-1">Формат построчно: Имя | URL | Логин | Пароль</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Логин администратора</label>
+                        <input name="admin_user" value="{{ settings.admin_user }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Пароль администратора</label>
+                        <input name="admin_pass" value="{{ settings.admin_pass }}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                    </div>
                 </div>
                 <div>
                     <label class="text-xs text-slate-400 block mb-1">Канал перехвата (источник)</label>
@@ -264,13 +271,8 @@
                 const res = await fetch('/api/logs');
                 const data = await res.json();
                 const el = document.getElementById('logs');
-                
-                // Проверяем, находится ли пользователь в самом низу логов (с запасом 40px)
                 const isAtBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 40;
-                
                 el.innerText = data.logs || 'Логи отсутствуют';
-                
-                // Прокручиваем только если юзер сам не листал наверх или нажал "Обновить"
                 if (isAtBottom || forceScroll) {
                     el.scrollTop = el.scrollHeight;
                 }
