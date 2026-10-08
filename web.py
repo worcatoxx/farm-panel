@@ -12,7 +12,6 @@ BASE_DIR = "/root/farm_panel"
 CONFIG_FILE = os.path.join(BASE_DIR, "accounts.json")
 SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
 
-# Жестко фиксируем путь к шаблонам, чтобы служба никогда не теряла папку templates
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.urandom(24)
 
@@ -25,7 +24,7 @@ def load_settings():
         "source_channel": "vaycher_virtnumber",
         "target_bot": "Virtnumber_buy_bot",
         "custom_domain": "",
-        "linked_nodes": ""
+        "nodes": []
     }
     if not os.path.exists(SETTINGS_FILE):
         return default_settings
@@ -59,7 +58,6 @@ def get_server_ips():
     primary_ip = None
     secondary_ip = None
 
-    # 1. Запрашиваем реальный публичный IP (для Oracle / AWS за NAT)
     try:
         req = urllib.request.Request("https://api.ipify.org", headers={"User-Agent": "curl/7.68.0"})
         with urllib.request.urlopen(req, timeout=2.5) as r:
@@ -67,7 +65,6 @@ def get_server_ips():
     except Exception:
         pass
 
-    # 2. Локальные адреса интерфейсов с фильтром виртуалок Docker
     local_ips = []
     try:
         out = subprocess.check_output(["ip", "-4", "addr", "show", "scope", "global"], text=True)
@@ -75,7 +72,6 @@ def get_server_ips():
             line = line.strip()
             if line.startswith("inet "):
                 ip = line.split()[1].split("/")[0]
-                # Отсекаем Docker (172.17.x, 172.18.x) и петли
                 if not ip.startswith(("172.17.", "172.18.", "172.19.", "127.", "169.254.")):
                     local_ips.append(ip)
     except Exception:
@@ -84,7 +80,6 @@ def get_server_ips():
     if not primary_ip:
         primary_ip = local_ips[0] if local_ips else "127.0.0.1"
 
-    # Ищем реальный второй IP (если провайдер выдал 2 разных внешних IP)
     for ip in local_ips:
         if ip != primary_ip and not ip.startswith("10.") and not ip.startswith("192.168."):
             secondary_ip = ip
@@ -99,24 +94,8 @@ def get_service_status():
     except Exception:
         return "unknown"
 
-def parse_linked_nodes(raw_text):
-    nodes = []
-    if not raw_text:
-        return nodes
-    for line in raw_text.splitlines():
-        line = line.strip()
-        if not line or "|" not in line:
-            continue
-        parts = [p.strip() for p in line.split("|")]
-        name = parts[0]
-        url = parts[1].rstrip("/")
-        user = parts[2] if len(parts) > 2 else "admin"
-        pwd = parts[3] if len(parts) > 3 else ""
-        nodes.append({"name": name, "url": url, "user": user, "pass": pwd})
-    return nodes
-
 def trigger_remote_restart(node):
-    url = f"{node['url']}/service/restart"
+    url = f"{node['url'].rstrip('/')}/service/restart"
     req = urllib.request.Request(url, data=b"", method="POST")
     if node.get("user") and node.get("pass"):
         auth = base64.b64encode(f"{node['user']}:{node['pass']}".encode()).decode()
@@ -130,7 +109,6 @@ def trigger_remote_restart(node):
 @app.before_request
 def require_login():
     settings = load_settings()
-    # Поддержка Basic Auth для удаленных рестартов с других VPS
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Basic "):
         try:
@@ -159,7 +137,6 @@ def login():
             return redirect("/")
         error = "Неверный логин или пароль"
 
-    # Если login.html существует в templates, рендерим его, иначе отдаем встроенный шаблон
     login_template_path = os.path.join(BASE_DIR, "templates", "login.html")
     if os.path.exists(login_template_path):
         return render_template("login.html", error=error)
@@ -167,13 +144,10 @@ def login():
     fallback_html = """
     <!DOCTYPE html>
     <html lang="ru">
-    <head>
-        <meta charset="UTF-8"><title>Вход | FarmBot</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
+    <head><meta charset="UTF-8"><title>Вход</title><script src="https://cdn.tailwindcss.com"></script></head>
     <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
         <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-sm w-full">
-            <h1 class="text-lg font-bold mb-4">Вход в панель FarmBot</h1>
+            <h1 class="text-lg font-bold mb-4">Вход в FarmBot</h1>
             {% if error %}<div class="bg-rose-500/20 text-rose-400 p-2.5 rounded-lg text-xs mb-4">{{ error }}</div>{% endif %}
             <form method="post" class="flex flex-col gap-3">
                 <input name="username" placeholder="Логин" required class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none">
@@ -204,7 +178,7 @@ def index():
     if secondary_ip:
         available_ips.append({"val": secondary_ip, "label": f"Дополнительный IP ({secondary_ip})"})
 
-    linked_nodes = parse_linked_nodes(settings.get("linked_nodes", ""))
+    nodes = settings.get("nodes", [])
     current_display_host = settings.get("custom_domain") if settings.get("custom_domain") else primary_ip
 
     return render_template(
@@ -217,8 +191,38 @@ def index():
         secondary_accs=secondary_accs,
         available_ips=available_ips,
         settings=settings,
-        linked_nodes=linked_nodes
+        linked_nodes=nodes
     )
+
+@app.route("/node/add", methods=["POST"])
+def add_node():
+    settings = load_settings()
+    name = request.form.get("node_name", "").strip()
+    url = request.form.get("node_url", "").strip()
+    user = request.form.get("node_user", "").strip() or "admin"
+    pwd = request.form.get("node_pass", "").strip()
+
+    if name and url:
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = f"http://{url}"
+        
+        nodes = settings.get("nodes", [])
+        nodes.append({"name": name, "url": url, "user": user, "pass": pwd})
+        settings["nodes"] = nodes
+        save_settings(settings)
+
+    return redirect("/?tab=settings")
+
+@app.route("/node/delete", methods=["POST"])
+def delete_node():
+    settings = load_settings()
+    idx = int(request.form.get("node_index", -1))
+    nodes = settings.get("nodes", [])
+    if 0 <= idx < len(nodes):
+        nodes.pop(idx)
+        settings["nodes"] = nodes
+        save_settings(settings)
+    return redirect("/?tab=settings")
 
 @app.route("/start-phone-login", methods=["POST"])
 def start_phone_login():
@@ -260,25 +264,22 @@ def start_phone_login():
     return f"""
     <!DOCTYPE html>
     <html lang="ru">
-    <head>
-        <meta charset="UTF-8"><title>Подтверждение Telegram</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
+    <head><meta charset="UTF-8"><title>Подтверждение Telegram</title><script src="https://cdn.tailwindcss.com"></script></head>
     <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full">
-            <h2 class="text-base font-bold mb-2">Код подтверждения Telegram</h2>
+            <h2 class="text-base font-bold mb-2">Код подтверждения</h2>
             <p class="text-xs text-slate-400 mb-4">Код отправлен на <span class="text-sky-400">{phone}</span></p>
             <form action="/finish-phone-login" method="post" class="flex flex-col gap-3">
                 <input type="hidden" name="session_name" value="{session_name}">
                 <div>
                     <label class="text-xs text-slate-400 block mb-1">Код из Telegram</label>
-                    <input name="code" placeholder="12345" required autofocus class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                    <input name="code" placeholder="12345" required autofocus class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none font-mono">
                 </div>
                 <div>
-                    <label class="text-xs text-slate-400 block mb-1">Облачный пароль (2FA), если есть</label>
-                    <input name="password" type="password" placeholder="Пароль 2FA" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                    <label class="text-xs text-slate-400 block mb-1">2FA пароль (если есть)</label>
+                    <input name="password" type="password" placeholder="Пароль 2FA" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none">
                 </div>
-                <button type="submit" class="mt-2 w-full bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition">Подтвердить вход</button>
+                <button type="submit" class="mt-2 w-full bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition">Подтвердить</button>
             </form>
         </div>
     </body>
@@ -293,7 +294,7 @@ def finish_phone_login():
 
     data = login_sessions.get(session_name)
     if not data:
-        return "Сессия авторизации не найдена. <a href='/'>На главную</a>", 400
+        return "Сессия авторизации не найдена. <a href='/'>Назад</a>", 400
 
     client = data["client"]
     try:
@@ -305,7 +306,7 @@ def finish_phone_login():
             except Exception as e:
                 return f"Неверный пароль 2FA: {e} <br><a href='/'>Назад</a>", 400
         else:
-            return "На аккаунте стоит 2FA пароль. Введите его при повторной попытке. <br><a href='/'>Назад</a>", 400
+            return "Требуется 2FA пароль. Введите его при повторной попытке. <br><a href='/'>Назад</a>", 400
     except Exception as e:
         return f"Ошибка при вводе кода: {e} <br><a href='/'>Назад</a>", 400
 
@@ -332,7 +333,6 @@ def save_settings_route():
     settings["source_channel"] = request.form.get("source_channel", "").strip()
     settings["target_bot"] = request.form.get("target_bot", "").strip()
     settings["custom_domain"] = request.form.get("custom_domain", "").strip()
-    settings["linked_nodes"] = request.form.get("linked_nodes", "").strip()
     save_settings(settings)
     return redirect("/?tab=settings")
 
@@ -345,7 +345,7 @@ def restart_service():
 def restart_all_services():
     subprocess.run(["systemctl", "restart", "farmbot"])
     settings = load_settings()
-    nodes = parse_linked_nodes(settings.get("linked_nodes", ""))
+    nodes = settings.get("nodes", [])
     for node in nodes:
         threading.Thread(target=trigger_remote_restart, args=(node,), daemon=True).start()
     return redirect("/")
