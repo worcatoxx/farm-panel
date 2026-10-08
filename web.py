@@ -4,6 +4,8 @@ import subprocess
 import threading
 import urllib.request
 import base64
+import shutil
+from datetime import datetime
 from flask import Flask, render_template, render_template_string, request, redirect, session, jsonify
 from telethon.sync import TelegramClient
 from telethon.errors import SessionPasswordNeededError
@@ -11,6 +13,8 @@ from telethon.errors import SessionPasswordNeededError
 BASE_DIR = "/root/farm_panel"
 CONFIG_FILE = os.path.join(BASE_DIR, "accounts.json")
 SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
+TRASH_FILE = os.path.join(BASE_DIR, "trash.json")
+TRASH_DIR = os.path.join(BASE_DIR, "trash")
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.urandom(24)
@@ -53,6 +57,52 @@ def load_accounts():
 def save_accounts(accounts):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(accounts, f, indent=4, ensure_ascii=False)
+
+def load_trash():
+    if not os.path.exists(TRASH_FILE):
+        return []
+    try:
+        with open(TRASH_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_trash(trash):
+    with open(TRASH_FILE, "w", encoding="utf-8") as f:
+        json.dump(trash, f, indent=4, ensure_ascii=False)
+
+def move_acc_to_trash(session_name: str, reason: str = "Удален вручную"):
+    s_target = str(session_name).strip()
+    accs = load_accounts()
+    target = None
+    new_accs = []
+    for a in accs:
+        if str(a.get("session")).strip() == s_target:
+            target = a
+        else:
+            new_accs.append(a)
+    save_accounts(new_accs)
+
+    if not target:
+        target = {"session": s_target, "phone": "-"}
+
+    target["trash_reason"] = reason
+    target["deleted_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    trash = load_trash()
+    trash = [t for t in trash if str(t.get("session")).strip() != s_target]
+    trash.append(target)
+    save_trash(trash)
+
+    os.makedirs(TRASH_DIR, exist_ok=True)
+    for ext in [".session", ".session-journal"]:
+        src = os.path.join(BASE_DIR, f"{s_target}{ext}")
+        dst = os.path.join(TRASH_DIR, f"{s_target}{ext}")
+        if os.path.exists(src):
+            try:
+                shutil.move(src, dst)
+            except Exception:
+                pass
 
 def get_server_ips():
     primary_ip = None
@@ -143,8 +193,7 @@ def login():
     
     fallback_html = """
     <!DOCTYPE html>
-    <html lang="ru">
-    <head><meta charset="UTF-8"><title>Вход</title><script src="https://cdn.tailwindcss.com"></script></head>
+    <html lang="ru"><head><meta charset="UTF-8"><title>Вход</title><script src="https://cdn.tailwindcss.com"></script></head>
     <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
         <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-sm w-full">
             <h1 class="text-lg font-bold mb-4">Вход в FarmBot</h1>
@@ -155,8 +204,7 @@ def login():
                 <button type="submit" class="mt-2 bg-sky-600 hover:bg-sky-500 py-2.5 rounded-lg text-xs font-medium">Войти</button>
             </form>
         </div>
-    </body>
-    </html>
+    </body></html>
     """
     return render_template_string(fallback_html, error=error)
 
@@ -170,6 +218,7 @@ def index():
     settings = load_settings()
     primary_ip, secondary_ip = get_server_ips()
     accounts = load_accounts()
+    trash_accs = load_trash()
 
     primary_accs = [a for a in accounts if not a.get("bind_ip") or a.get("bind_ip") == primary_ip]
     secondary_accs = [a for a in accounts if a.get("bind_ip") == secondary_ip] if secondary_ip else []
@@ -191,8 +240,77 @@ def index():
         secondary_accs=secondary_accs,
         available_ips=available_ips,
         settings=settings,
-        linked_nodes=nodes
+        linked_nodes=nodes,
+        trash_accs=trash_accs
     )
+
+@app.route("/delete", methods=["POST"])
+def delete_acc():
+    sess_name = request.form.get("session_name")
+    if sess_name:
+        move_acc_to_trash(sess_name, "Удален вручную пользователем")
+    return redirect("/")
+
+@app.route("/trash/restore", methods=["POST"])
+def restore_acc():
+    sess_name = str(request.form.get("session_name", "")).strip()
+    trash = load_trash()
+    target = None
+    new_trash = []
+    for t in trash:
+        if str(t.get("session")).strip() == sess_name:
+            target = t
+        else:
+            new_trash.append(t)
+    save_trash(new_trash)
+
+    if target:
+        accs = load_accounts()
+        accs = [a for a in accs if str(a.get("session")).strip() != sess_name]
+        # Очищаем сервисные метки корзины перед возвратом
+        target.pop("trash_reason", None)
+        target.pop("deleted_at", None)
+        accs.append(target)
+        save_accounts(accs)
+
+        # Возвращаем файл сессии на место
+        for ext in [".session", ".session-journal"]:
+            src = os.path.join(TRASH_DIR, f"{sess_name}{ext}")
+            dst = os.path.join(BASE_DIR, f"{sess_name}{ext}")
+            if os.path.exists(src):
+                try:
+                    shutil.move(src, dst)
+                except Exception:
+                    pass
+
+    return redirect("/?tab=trash")
+
+@app.route("/trash/delete", methods=["POST"])
+def delete_trash_permanent():
+    sess_name = str(request.form.get("session_name", "")).strip()
+    trash = load_trash()
+    trash = [t for t in trash if str(t.get("session")).strip() != sess_name]
+    save_trash(trash)
+
+    for ext in [".session", ".session-journal"]:
+        fpath = os.path.join(TRASH_DIR, f"{sess_name}{ext}")
+        if os.path.exists(fpath):
+            try:
+                os.remove(fpath)
+            except Exception:
+                pass
+    return redirect("/?tab=trash")
+
+@app.route("/trash/clear", methods=["POST"])
+def clear_all_trash():
+    save_trash([])
+    if os.path.exists(TRASH_DIR):
+        try:
+            shutil.rmtree(TRASH_DIR)
+            os.makedirs(TRASH_DIR, exist_ok=True)
+        except Exception:
+            pass
+    return redirect("/?tab=trash")
 
 @app.route("/node/add", methods=["POST"])
 def add_node():
@@ -205,7 +323,6 @@ def add_node():
     if name and url:
         if not url.startswith("http://") and not url.startswith("https://"):
             url = f"http://{url}"
-        
         nodes = settings.get("nodes", [])
         nodes.append({"name": name, "url": url, "user": user, "pass": pwd})
         settings["nodes"] = nodes
@@ -263,8 +380,7 @@ def start_phone_login():
 
     return f"""
     <!DOCTYPE html>
-    <html lang="ru">
-    <head><meta charset="UTF-8"><title>Подтверждение Telegram</title><script src="https://cdn.tailwindcss.com"></script></head>
+    <html lang="ru"><head><meta charset="UTF-8"><title>Подтверждение Telegram</title><script src="https://cdn.tailwindcss.com"></script></head>
     <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full">
             <h2 class="text-base font-bold mb-2">Код подтверждения</h2>
@@ -282,8 +398,7 @@ def start_phone_login():
                 <button type="submit" class="mt-2 w-full bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition">Подтвердить</button>
             </form>
         </div>
-    </body>
-    </html>
+    </body></html>
     """
 
 @app.route("/finish-phone-login", methods=["POST"])
@@ -362,20 +477,6 @@ def get_logs():
         return jsonify({"logs": out})
     except Exception as e:
         return jsonify({"logs": f"Ошибка чтения логов: {e}"})
-
-@app.route("/delete", methods=["POST"])
-def delete_acc():
-    sess_name = request.form.get("session_name")
-    accs = load_accounts()
-    accs = [a for a in accs if a["session"] != sess_name]
-    save_accounts(accs)
-    sess_file = os.path.join(BASE_DIR, f"{sess_name}.session")
-    if os.path.exists(sess_file):
-        try:
-            os.remove(sess_file)
-        except Exception:
-            pass
-    return redirect("/")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
