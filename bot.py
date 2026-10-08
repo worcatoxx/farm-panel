@@ -5,25 +5,20 @@ import re
 import hashlib
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageEntityCode, MessageEntityPre
+from telethon.errors import (
+    UserDeactivatedError,
+    UserDeactivatedBanError,
+    AuthKeyUnregisteredError,
+    SessionRevokedError,
+    SessionExpiredError
+)
 
 CONFIG_FILE = "/root/farm_panel/accounts.json"
 SETTINGS_FILE = "/root/farm_panel/config.json"
 
 clients = []
+client_sessions = {}
 target_peers = {}
-
-def get_device_fingerprint(session_name: str):
-    """Генерирует стабильный уникальный отпечаток реального устройства для каждого аккаунта"""
-    devices = [
-        {"device_model": "Samsung Galaxy S23", "system_version": "Android 14", "app_version": "10.14.0"},
-        {"device_model": "Xiaomi Redmi Note 13", "system_version": "Android 13", "app_version": "10.13.1"},
-        {"device_model": "Desktop x64", "system_version": "Windows 11", "app_version": "5.5.1 x64"},
-        {"device_model": "Desktop x64", "system_version": "Windows 10", "app_version": "5.4.0 x64"},
-        {"device_model": "Google Pixel 8", "system_version": "Android 14", "app_version": "10.14.2"}
-    ]
-    # Выбираем устройство стабильно по хэшу имени сессии
-    idx = int(hashlib.md5(session_name.encode()).hexdigest(), 16) % len(devices)
-    return devices[idx]
 
 def load_settings():
     default_settings = {
@@ -47,28 +42,76 @@ def load_accounts():
     except Exception:
         return []
 
+def save_accounts(accounts):
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(accounts, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"[!] Ошибка сохранения accounts.json: {e}", flush=True)
+
+def remove_dead_account(session_name: str):
+    """Полностью вырезает замороженный или забаненный аккаунт из базы и удаляет файл сессии"""
+    try:
+        accs = load_accounts()
+        new_accs = [a for a in accs if a.get("session") != session_name]
+        save_accounts(new_accs)
+
+        for ext in [".session", ".session-journal"]:
+            fpath = f"/root/farm_panel/{session_name}{ext}"
+            if os.path.exists(fpath):
+                try:
+                    os.remove(fpath)
+                except Exception:
+                    pass
+        print(f"[🗑️] Сессия {session_name} заморожена/вылетела. Автоматически удалена из панели и диска!", flush=True)
+    except Exception as e:
+        print(f"[!] Не удалось удалить {session_name}: {e}", flush=True)
+
+def get_device_fingerprint(session_name: str):
+    devices = [
+        {"device_model": "Samsung Galaxy S23", "system_version": "Android 14", "app_version": "10.14.0"},
+        {"device_model": "Xiaomi Redmi Note 13", "system_version": "Android 13", "app_version": "10.13.1"},
+        {"device_model": "Desktop x64", "system_version": "Windows 11", "app_version": "5.5.1 x64"},
+        {"device_model": "Desktop x64", "system_version": "Windows 10", "app_version": "5.4.0 x64"},
+        {"device_model": "Google Pixel 8", "system_version": "Android 14", "app_version": "10.14.2"}
+    ]
+    idx = int(hashlib.md5(session_name.encode()).hexdigest(), 16) % len(devices)
+    return devices[idx]
+
 async def init_client_target(client: TelegramClient, target_bot: str):
     try:
         peer = await client.get_input_entity(target_bot)
         target_peers[client] = peer
     except Exception as e:
-        print(f"[!] Не удалось закэшировать бота для сессии: {e}", flush=True)
+        print(f"[!] Не удалось закэшировать бота: {e}", flush=True)
 
 async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
+    sess_name = client_sessions.get(client, "unknown")
     try:
         peer = target_peers.get(client, target_bot)
         await client.send_message(peer, code)
         me = await client.get_me()
         print(f"[OK] {me.first_name} (@{me.username}) отправил код: {code}", flush=True)
+    except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError):
+        print(f"[x] Аккаунт {sess_name} отлетел во время отправки!", flush=True)
+        if client in clients:
+            clients.remove(client)
+        remove_dead_account(sess_name)
     except Exception as e:
-        print(f"[ERR] Ошибка отправки: {e}", flush=True)
+        print(f"[ERR] Ошибка отправки ({sess_name}): {e}", flush=True)
 
 async def ping_client(client: TelegramClient):
+    sess_name = client_sessions.get(client, "unknown")
     try:
         if client.is_connected():
             await client.get_me()
         else:
             await client.connect()
+    except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError):
+        print(f"[x] Аккаунт {sess_name} отлетел во время проверки сокета!", flush=True)
+        if client in clients:
+            clients.remove(client)
+        remove_dead_account(sess_name)
     except Exception:
         pass
 
@@ -76,7 +119,7 @@ async def keep_alive():
     while True:
         await asyncio.sleep(15)
         if clients:
-            await asyncio.gather(*(ping_client(c) for c in clients), return_exceptions=True)
+            await asyncio.gather(*(ping_client(c) for c in list(clients)), return_exceptions=True)
 
 def solve_math_equation(text: str) -> str | None:
     if not text:
@@ -139,6 +182,8 @@ async def main():
         print("[!] Список аккаунтов пуст.", flush=True)
         return
 
+    dead_accounts = []
+
     for acc in accounts:
         session_name = acc["session"]
         session_path = f"/root/farm_panel/{session_name}"
@@ -155,7 +200,7 @@ async def main():
             "lang_code": "ru",
             "system_lang_code": "ru-RU",
             "auto_reconnect": True,
-            "connection_retries": -1,
+            "connection_retries": 1,
             "retry_delay": 1,
             "timeout": 8
         }
@@ -165,23 +210,36 @@ async def main():
             if ":" in target_ip:
                 kwargs["use_ipv6"] = True
             kwargs["local_addr"] = (target_ip, 0)
-            print(f"[*] {session_name} -> IP: {target_ip} [{device_info['device_model']}]", flush=True)
-        else:
-            print(f"[*] {session_name} -> Основной IP [{device_info['device_model']}]", flush=True)
 
+        c = TelegramClient(**kwargs)
         try:
-            c = TelegramClient(**kwargs)
             await c.connect()
-            if await c.is_user_authorized():
+            is_auth = await c.is_user_authorized()
+            if is_auth:
                 me = await c.get_me()
                 clients.append(c)
+                client_sessions[c] = session_name
                 print(f"[+] Сессия {session_name} онлайн: {me.first_name} ({acc.get('phone', '-')})", flush=True)
             else:
-                print(f"[-] Сессия {session_name} НЕ авторизована (вылетела или заблокирована)!", flush=True)
+                print(f"[-] Сессия {session_name} НЕ авторизована (вылетела или удалена). В утиль!", flush=True)
+                dead_accounts.append(session_name)
+                await c.disconnect()
+        except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError, SessionExpiredError) as e:
+            print(f"[-] Сессия {session_name} забанена ({e}). В утиль!", flush=True)
+            dead_accounts.append(session_name)
+            try:
+                await c.disconnect()
+            except Exception:
+                pass
         except Exception as e:
             print(f"[!] Ошибка подключения {session_name}: {e}", flush=True)
 
-    print(f"\n[✓] Итого активных клиентов: {len(clients)}", flush=True)
+    # Чистим все найденные мертвые аккаунты
+    if dead_accounts:
+        for s in dead_accounts:
+            remove_dead_account(s)
+
+    print(f"\n[✓] Итого живых клиентов: {len(clients)}", flush=True)
     print(f"[✓] Канал мониторинга: @{source_channel}", flush=True)
     print(f"[✓] Целевой бот: @{target_bot}", flush=True)
 
@@ -226,7 +284,7 @@ async def main():
                     return
 
             print(f"\n[!] ПОЙМАН ВАУЧЕР: {voucher_code}. Залп со всех {len(clients)} аккаунтов...", flush=True)
-            await asyncio.gather(*(send_to_bot(client, target_bot, voucher_code) for client in clients))
+            await asyncio.gather(*(send_to_bot(client, target_bot, voucher_code) for client in list(clients)))
 
     asyncio.create_task(keep_alive())
 
