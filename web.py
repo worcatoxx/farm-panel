@@ -10,7 +10,6 @@ from flask import Flask, render_template, render_template_string, request, redir
 from telethon.sync import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
-# Код живет в BASE_DIR, а данные - в защищенной DATA_DIR
 BASE_DIR = "/root/farm_panel"
 DATA_DIR = "/root/farm_data"
 os.makedirs(DATA_DIR, exist_ok=True)
