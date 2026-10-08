@@ -15,11 +15,14 @@ from telethon.errors import (
     SessionExpiredError
 )
 
-BASE_DIR = "/root/farm_panel"
-CONFIG_FILE = os.path.join(BASE_DIR, "accounts.json")
-SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
-TRASH_FILE = os.path.join(BASE_DIR, "trash.json")
-TRASH_DIR = os.path.join(BASE_DIR, "trash")
+DATA_DIR = "/root/farm_data"
+os.makedirs(DATA_DIR, exist_ok=True)
+
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+ACCOUNTS_FILE = os.path.join(DATA_DIR, "accounts.json")
+TRASH_FILE = os.path.join(DATA_DIR, "trash.json")
+TRASH_DIR = os.path.join(DATA_DIR, "trash")
+os.makedirs(TRASH_DIR, exist_ok=True)
 
 clients = []
 client_sessions = {}
@@ -30,26 +33,26 @@ def load_settings():
         "source_channel": "vaycher_virtnumber",
         "target_bot": "Virtnumber_buy_bot"
     }
-    if not os.path.exists(SETTINGS_FILE):
+    if not os.path.exists(CONFIG_FILE):
         return default_settings
     try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return default_settings
 
 def load_accounts():
-    if not os.path.exists(CONFIG_FILE):
+    if not os.path.exists(ACCOUNTS_FILE):
         return []
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return []
 
 def save_accounts(accounts):
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
             json.dump(accounts, f, indent=4, ensure_ascii=False)
     except Exception as e:
         print(f"[!] Ошибка сохранения accounts.json: {e}", flush=True)
@@ -71,7 +74,6 @@ def save_trash(trash):
         print(f"[!] Ошибка сохранения trash.json: {e}", flush=True)
 
 def move_to_trash(session_name: str, reason: str = ""):
-    """Перемещает нерабочий аккаунт в корзину без безвозвратного удаления"""
     try:
         s_target = str(session_name).strip()
         accs = load_accounts()
@@ -95,9 +97,8 @@ def move_to_trash(session_name: str, reason: str = ""):
         trash.append(target_acc)
         save_trash(trash)
 
-        os.makedirs(TRASH_DIR, exist_ok=True)
         for ext in [".session", ".session-journal"]:
-            src = os.path.join(BASE_DIR, f"{s_target}{ext}")
+            src = os.path.join(DATA_DIR, f"{s_target}{ext}")
             dst = os.path.join(TRASH_DIR, f"{s_target}{ext}")
             if os.path.exists(src):
                 try:
@@ -105,7 +106,7 @@ def move_to_trash(session_name: str, reason: str = ""):
                 except Exception:
                     pass
 
-        print(f"[🗑️ В КОРЗИНУ] Сессия {s_target} перемещена в корзину! Причина: {reason}", flush=True)
+        print(f"[🗑️ В КОРЗИНУ] Сессия {s_target} перемещена в корзину: {reason}", flush=True)
     except Exception as e:
         print(f"[!] Ошибка перемещения в корзину {session_name}: {e}", flush=True)
 
@@ -130,7 +131,6 @@ async def init_client_target(client: TelegramClient, target_bot: str):
         return None
 
 async def test_bot_start(client: TelegramClient, target_bot: str):
-    """Отправляет /start в бота ваучеров для проверки доступности отправки"""
     try:
         peer = target_peers.get(client)
         if not peer:
@@ -154,7 +154,7 @@ async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
         if any(w in err_msg.lower() for w in ["frozen", "deactivated", "banned", "restricted", "forbidden", "auth_key"]):
             if client in clients:
                 clients.remove(client)
-            move_to_trash(sess_name, f"Слетел/заморожен при отправке: {err_msg}")
+            move_to_trash(sess_name, f"Слетел при отправке: {err_msg}")
 
 async def keep_alive():
     while True:
@@ -239,11 +239,11 @@ async def main():
         print("[!] Список аккаунтов пуст.", flush=True)
         return
 
-    print(f"[*] Проверка аккаунтов через бота @{target_bot} (отправка /start)...", flush=True)
+    print(f"[*] Проверка аккаунтов через бота @{target_bot} (/start)...", flush=True)
 
     for acc in accounts:
         session_name = str(acc["session"]).strip()
-        session_path = os.path.join(BASE_DIR, session_name)
+        session_path = os.path.join(DATA_DIR, session_name)
         bind_ip = acc.get("bind_ip")
         device_info = get_device_fingerprint(session_name)
 
@@ -281,7 +281,6 @@ async def main():
                 if not me or getattr(me, "deleted", False):
                     death_reason = "Аккаунт удален в Telegram"
                 else:
-                    # Тестовая отправка /start в целевого бота ваучеров
                     can_start, start_err = await test_bot_start(c, target_bot)
                     if not can_start:
                         death_reason = f"Не удалось отправить /start в @{target_bot}: {start_err}"
@@ -305,10 +304,10 @@ async def main():
     print(f"[✓] Целевой бот: @{target_bot}", flush=True)
 
     if not clients:
-        print("[!] Нет доступных аккаунтов для перехвата.", flush=True)
+        print("[!] Нет доступных аккаунтов для снайпинга.", flush=True)
         return
 
-    print("[*] Кэшируем бота для быстрого залпа...", flush=True)
+    print("[*] Кэшируем бота...", flush=True)
     await asyncio.gather(*(init_client_target(c, target_bot) for c in clients), return_exceptions=True)
     print("[✓] Ферма готова к работе", flush=True)
 
