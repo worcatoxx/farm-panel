@@ -4,13 +4,19 @@ import subprocess
 import threading
 import urllib.request
 import base64
-from flask import Flask, render_template, request, redirect, session, jsonify
+from flask import Flask, render_template, render_template_string, request, redirect, session, jsonify
+from telethon.sync import TelegramClient
+from telethon.errors import SessionPasswordNeededError
 
-app = Flask(__name__)
+BASE_DIR = "/root/farm_panel"
+CONFIG_FILE = os.path.join(BASE_DIR, "accounts.json")
+SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
+
+# Жестко фиксируем путь к шаблонам, чтобы служба никогда не теряла папку templates
+app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.urandom(24)
 
-CONFIG_FILE = "/root/farm_panel/accounts.json"
-SETTINGS_FILE = "/root/farm_panel/config.json"
+login_sessions = {}
 
 def load_settings():
     default_settings = {
@@ -50,22 +56,40 @@ def save_accounts(accounts):
         json.dump(accounts, f, indent=4, ensure_ascii=False)
 
 def get_server_ips():
-    primary_ip = "127.0.0.1"
+    primary_ip = None
     secondary_ip = None
+
+    # 1. Запрашиваем реальный публичный IP (для Oracle / AWS за NAT)
+    try:
+        req = urllib.request.Request("https://api.ipify.org", headers={"User-Agent": "curl/7.68.0"})
+        with urllib.request.urlopen(req, timeout=2.5) as r:
+            primary_ip = r.read().decode("utf-8").strip()
+    except Exception:
+        pass
+
+    # 2. Локальные адреса интерфейсов с фильтром виртуалок Docker
+    local_ips = []
     try:
         out = subprocess.check_output(["ip", "-4", "addr", "show", "scope", "global"], text=True)
-        ips = []
         for line in out.splitlines():
             line = line.strip()
             if line.startswith("inet "):
                 ip = line.split()[1].split("/")[0]
-                ips.append(ip)
-        if ips:
-            primary_ip = ips[0]
-            if len(ips) > 1:
-                secondary_ip = ips[1]
+                # Отсекаем Docker (172.17.x, 172.18.x) и петли
+                if not ip.startswith(("172.17.", "172.18.", "172.19.", "127.", "169.254.")):
+                    local_ips.append(ip)
     except Exception:
         pass
+
+    if not primary_ip:
+        primary_ip = local_ips[0] if local_ips else "127.0.0.1"
+
+    # Ищем реальный второй IP (если провайдер выдал 2 разных внешних IP)
+    for ip in local_ips:
+        if ip != primary_ip and not ip.startswith("10.") and not ip.startswith("192.168."):
+            secondary_ip = ip
+            break
+
     return primary_ip, secondary_ip
 
 def get_service_status():
@@ -106,6 +130,7 @@ def trigger_remote_restart(node):
 @app.before_request
 def require_login():
     settings = load_settings()
+    # Поддержка Basic Auth для удаленных рестартов с других VPS
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Basic "):
         try:
@@ -125,14 +150,41 @@ def require_login():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     settings = load_settings()
+    error = None
     if request.method == "POST":
         user = request.form.get("username")
         pwd = request.form.get("password")
         if user == settings["admin_user"] and pwd == settings["admin_pass"]:
             session["logged_in"] = True
             return redirect("/")
-        return render_template("login.html", error="Неверный логин или пароль")
-    return render_template("login.html")
+        error = "Неверный логин или пароль"
+
+    # Если login.html существует в templates, рендерим его, иначе отдаем встроенный шаблон
+    login_template_path = os.path.join(BASE_DIR, "templates", "login.html")
+    if os.path.exists(login_template_path):
+        return render_template("login.html", error=error)
+    
+    fallback_html = """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8"><title>Вход | FarmBot</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
+        <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-sm w-full">
+            <h1 class="text-lg font-bold mb-4">Вход в панель FarmBot</h1>
+            {% if error %}<div class="bg-rose-500/20 text-rose-400 p-2.5 rounded-lg text-xs mb-4">{{ error }}</div>{% endif %}
+            <form method="post" class="flex flex-col gap-3">
+                <input name="username" placeholder="Логин" required class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none">
+                <input name="password" type="password" placeholder="Пароль" required class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none">
+                <button type="submit" class="mt-2 bg-sky-600 hover:bg-sky-500 py-2.5 rounded-lg text-xs font-medium">Войти</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(fallback_html, error=error)
 
 @app.route("/logout")
 def logout():
@@ -153,7 +205,6 @@ def index():
         available_ips.append({"val": secondary_ip, "label": f"Дополнительный IP ({secondary_ip})"})
 
     linked_nodes = parse_linked_nodes(settings.get("linked_nodes", ""))
-
     current_display_host = settings.get("custom_domain") if settings.get("custom_domain") else primary_ip
 
     return render_template(
@@ -168,6 +219,110 @@ def index():
         settings=settings,
         linked_nodes=linked_nodes
     )
+
+@app.route("/start-phone-login", methods=["POST"])
+def start_phone_login():
+    session_name = request.form.get("session_name", "").strip()
+    phone = request.form.get("phone", "").strip()
+    api_id = request.form.get("api_id", "").strip()
+    api_hash = request.form.get("api_hash", "").strip()
+    bind_ip = request.form.get("bind_ip", "").strip()
+
+    if not session_name or not phone or not api_id or not api_hash:
+        return "Заполните все поля", 400
+
+    session_path = os.path.join(BASE_DIR, session_name)
+    kwargs = {
+        "session": session_path,
+        "api_id": int(api_id),
+        "api_hash": api_hash
+    }
+    if bind_ip:
+        if ":" in bind_ip:
+            kwargs["use_ipv6"] = True
+        kwargs["local_addr"] = (bind_ip, 0)
+
+    try:
+        client = TelegramClient(**kwargs)
+        client.connect()
+        sent = client.send_code_request(phone)
+        login_sessions[session_name] = {
+            "client": client,
+            "phone": phone,
+            "api_id": int(api_id),
+            "api_hash": api_hash,
+            "bind_ip": bind_ip,
+            "phone_code_hash": sent.phone_code_hash
+        }
+    except Exception as e:
+        return f"<h3>Ошибка: {e}</h3><br><a href='/'>Назад</a>", 400
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8"><title>Подтверждение Telegram</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full">
+            <h2 class="text-base font-bold mb-2">Код подтверждения Telegram</h2>
+            <p class="text-xs text-slate-400 mb-4">Код отправлен на <span class="text-sky-400">{phone}</span></p>
+            <form action="/finish-phone-login" method="post" class="flex flex-col gap-3">
+                <input type="hidden" name="session_name" value="{session_name}">
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Код из Telegram</label>
+                    <input name="code" placeholder="12345" required autofocus class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none font-mono">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Облачный пароль (2FA), если есть</label>
+                    <input name="password" type="password" placeholder="Пароль 2FA" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:border-sky-500 outline-none">
+                </div>
+                <button type="submit" class="mt-2 w-full bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition">Подтвердить вход</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.route("/finish-phone-login", methods=["POST"])
+def finish_phone_login():
+    session_name = request.form.get("session_name", "").strip()
+    code = request.form.get("code", "").strip()
+    pwd = request.form.get("password", "").strip()
+
+    data = login_sessions.get(session_name)
+    if not data:
+        return "Сессия авторизации не найдена. <a href='/'>На главную</a>", 400
+
+    client = data["client"]
+    try:
+        client.sign_in(phone=data["phone"], code=code, phone_code_hash=data["phone_code_hash"])
+    except SessionPasswordNeededError:
+        if pwd:
+            try:
+                client.sign_in(password=pwd)
+            except Exception as e:
+                return f"Неверный пароль 2FA: {e} <br><a href='/'>Назад</a>", 400
+        else:
+            return "На аккаунте стоит 2FA пароль. Введите его при повторной попытке. <br><a href='/'>Назад</a>", 400
+    except Exception as e:
+        return f"Ошибка при вводе кода: {e} <br><a href='/'>Назад</a>", 400
+
+    client.disconnect()
+    del login_sessions[session_name]
+
+    accs = load_accounts()
+    accs = [a for a in accs if a["session"] != session_name]
+    accs.append({
+        "session": session_name,
+        "phone": data["phone"],
+        "api_id": data["api_id"],
+        "api_hash": data["api_hash"],
+        "bind_ip": data["bind_ip"]
+    })
+    save_accounts(accs)
+    return redirect("/")
 
 @app.route("/settings/save", methods=["POST"])
 def save_settings_route():
@@ -188,9 +343,7 @@ def restart_service():
 
 @app.route("/service/restart-all", methods=["POST"])
 def restart_all_services():
-    # 1. Рестарт текущего сервера
     subprocess.run(["systemctl", "restart", "farmbot"])
-    # 2. Параллельный сигнал остальным VPS
     settings = load_settings()
     nodes = parse_linked_nodes(settings.get("linked_nodes", ""))
     for node in nodes:
@@ -216,7 +369,7 @@ def delete_acc():
     accs = load_accounts()
     accs = [a for a in accs if a["session"] != sess_name]
     save_accounts(accs)
-    sess_file = f"/root/farm_panel/{sess_name}.session"
+    sess_file = os.path.join(BASE_DIR, f"{sess_name}.session")
     if os.path.exists(sess_file):
         try:
             os.remove(sess_file)
