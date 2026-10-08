@@ -3,6 +3,8 @@ import json
 import os
 import re
 import hashlib
+import shutil
+from datetime import datetime
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageEntityCode, MessageEntityPre
 from telethon.errors import (
@@ -13,8 +15,11 @@ from telethon.errors import (
     SessionExpiredError
 )
 
-CONFIG_FILE = "/root/farm_panel/accounts.json"
-SETTINGS_FILE = "/root/farm_panel/config.json"
+BASE_DIR = "/root/farm_panel"
+CONFIG_FILE = os.path.join(BASE_DIR, "accounts.json")
+SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
+TRASH_FILE = os.path.join(BASE_DIR, "trash.json")
+TRASH_DIR = os.path.join(BASE_DIR, "trash")
 
 clients = []
 client_sessions = {}
@@ -49,23 +54,60 @@ def save_accounts(accounts):
     except Exception as e:
         print(f"[!] Ошибка сохранения accounts.json: {e}", flush=True)
 
-def purge_dead_account(session_name: str, reason: str = ""):
-    """Автоматически вырезает аккаунт из accounts.json и стирает файлы сессии с диска"""
+def load_trash():
+    if not os.path.exists(TRASH_FILE):
+        return []
     try:
+        with open(TRASH_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_trash(trash):
+    try:
+        with open(TRASH_FILE, "w", encoding="utf-8") as f:
+            json.dump(trash, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"[!] Ошибка сохранения trash.json: {e}", flush=True)
+
+def move_to_trash(session_name: str, reason: str = ""):
+    """Перемещает нерабочий аккаунт в корзину без безвозвратного удаления"""
+    try:
+        s_target = str(session_name).strip()
         accs = load_accounts()
-        new_accs = [a for a in accs if a.get("session") != session_name]
+        target_acc = None
+        new_accs = []
+        for a in accs:
+            if str(a.get("session")).strip() == s_target:
+                target_acc = a
+            else:
+                new_accs.append(a)
         save_accounts(new_accs)
 
+        if not target_acc:
+            target_acc = {"session": s_target, "phone": "-"}
+
+        target_acc["trash_reason"] = reason
+        target_acc["deleted_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        trash = load_trash()
+        trash = [t for t in trash if str(t.get("session")).strip() != s_target]
+        trash.append(target_acc)
+        save_trash(trash)
+
+        os.makedirs(TRASH_DIR, exist_ok=True)
         for ext in [".session", ".session-journal"]:
-            fpath = f"/root/farm_panel/{session_name}{ext}"
-            if os.path.exists(fpath):
+            src = os.path.join(BASE_DIR, f"{s_target}{ext}")
+            dst = os.path.join(TRASH_DIR, f"{s_target}{ext}")
+            if os.path.exists(src):
                 try:
-                    os.remove(fpath)
+                    shutil.move(src, dst)
                 except Exception:
                     pass
-        print(f"[🗑️ АВТО-УДАЛЕНИЕ] Сессия {session_name} ({reason}) удалена из базы и стерта с диска!", flush=True)
+
+        print(f"[🗑️ В КОРЗИНУ] Сессия {s_target} перемещена в корзину! Причина: {reason}", flush=True)
     except Exception as e:
-        print(f"[!] Не удалось удалить {session_name}: {e}", flush=True)
+        print(f"[!] Ошибка перемещения в корзину {session_name}: {e}", flush=True)
 
 def get_device_fingerprint(session_name: str):
     devices = [
@@ -75,15 +117,29 @@ def get_device_fingerprint(session_name: str):
         {"device_model": "Desktop x64", "system_version": "Windows 10", "app_version": "5.4.0 x64"},
         {"device_model": "Google Pixel 8", "system_version": "Android 14", "app_version": "10.14.2"}
     ]
-    idx = int(hashlib.md5(session_name.encode()).hexdigest(), 16) % len(devices)
+    idx = int(hashlib.md5(str(session_name).encode()).hexdigest(), 16) % len(devices)
     return devices[idx]
 
 async def init_client_target(client: TelegramClient, target_bot: str):
     try:
         peer = await client.get_input_entity(target_bot)
         target_peers[client] = peer
+        return peer
     except Exception as e:
         print(f"[!] Не удалось закэшировать бота: {e}", flush=True)
+        return None
+
+async def test_bot_start(client: TelegramClient, target_bot: str):
+    """Отправляет /start в бота ваучеров для проверки доступности отправки"""
+    try:
+        peer = target_peers.get(client)
+        if not peer:
+            peer = await client.get_input_entity(target_bot)
+            target_peers[client] = peer
+        await client.send_message(peer, "/start")
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
 
 async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
     sess_name = client_sessions.get(client, "unknown")
@@ -92,53 +148,35 @@ async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
         await client.send_message(peer, code)
         me = await client.get_me()
         print(f"[OK] {me.first_name} (@{me.username}) отправил код: {code}", flush=True)
-    except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError, SessionExpiredError) as e:
-        if client in clients:
-            clients.remove(client)
-        purge_dead_account(sess_name, f"Бан/слет при отправке: {e}")
     except Exception as e:
-        err_str = str(e).lower()
-        if "restricted" in err_str or "deactivated" in err_str:
+        err_msg = str(e)
+        print(f"[x] Ошибка отправки на {sess_name}: {err_msg}", flush=True)
+        if any(w in err_msg.lower() for w in ["frozen", "deactivated", "banned", "restricted", "forbidden", "auth_key"]):
             if client in clients:
                 clients.remove(client)
-            purge_dead_account(sess_name, f"Заморожен: {e}")
-        else:
-            print(f"[ERR] Ошибка отправки ({sess_name}): {e}", flush=True)
-
-async def check_client_alive(client: TelegramClient):
-    sess_name = client_sessions.get(client, "unknown")
-    try:
-        if not client.is_connected():
-            await client.connect()
-        if not await client.is_user_authorized():
-            return False, "Не авторизован"
-        me = await client.get_me()
-        if not me or getattr(me, "restricted", False) or getattr(me, "deleted", False):
-            return False, "Заморожен / удален"
-        return True, me
-    except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError, SessionExpiredError) as e:
-        return False, f"Бан: {e}"
-    except Exception as e:
-        err_str = str(e).lower()
-        if "restricted" in err_str or "deactivated" in err_str:
-            return False, f"Заморозка: {e}"
-        return True, None
+            move_to_trash(sess_name, f"Слетел/заморожен при отправке: {err_msg}")
 
 async def keep_alive():
-    """Фоновый мониторинг сокетов и авто-выкидывание отлетевших аккаунтов"""
     while True:
-        await asyncio.sleep(20)
+        await asyncio.sleep(25)
         for c in list(clients):
-            is_ok, info = await check_client_alive(c)
-            if not is_ok:
-                sess = client_sessions.get(c, "unknown")
-                if c in clients:
-                    clients.remove(c)
-                purge_dead_account(sess, f"Отлетел в фоне: {info}")
-                try:
-                    await c.disconnect()
-                except Exception:
-                    pass
+            sess_name = client_sessions.get(c, "unknown")
+            try:
+                if not c.is_connected():
+                    await c.connect()
+                if not await c.is_user_authorized():
+                    raise Exception("Сессия сброшена")
+                await c.get_me()
+            except Exception as e:
+                err_msg = str(e)
+                if any(w in err_msg.lower() for w in ["frozen", "deactivated", "banned", "auth_key", "revoked"]):
+                    if c in clients:
+                        clients.remove(c)
+                    move_to_trash(sess_name, f"Отлетел в фоне: {err_msg}")
+                    try:
+                        await c.disconnect()
+                    except Exception:
+                        pass
 
 def solve_math_equation(text: str) -> str | None:
     if not text:
@@ -201,11 +239,11 @@ async def main():
         print("[!] Список аккаунтов пуст.", flush=True)
         return
 
-    print("[*] Сканирование аккаунтов на заморозку и слет сессий...", flush=True)
+    print(f"[*] Проверка аккаунтов через бота @{target_bot} (отправка /start)...", flush=True)
 
     for acc in accounts:
-        session_name = acc["session"]
-        session_path = f"/root/farm_panel/{session_name}"
+        session_name = str(acc["session"]).strip()
+        session_path = os.path.join(BASE_DIR, session_name)
         bind_ip = acc.get("bind_ip")
         device_info = get_device_fingerprint(session_name)
 
@@ -237,48 +275,37 @@ async def main():
         try:
             await c.connect()
             if not await c.is_user_authorized():
-                death_reason = "Сессия сброшена"
+                death_reason = "Сессия сброшена / не авторизована"
             else:
                 me = await c.get_me()
-                if not me:
-                    death_reason = "Пустой профиль"
-                elif getattr(me, "restricted", False):
-                    death_reason = "Заморожен Telegram (restricted)"
-                elif getattr(me, "deleted", False):
-                    death_reason = "Аккаунт удален"
+                if not me or getattr(me, "deleted", False):
+                    death_reason = "Аккаунт удален в Telegram"
                 else:
-                    # Тестовый запрос к API диалогов для проверки на скрытый блок
-                    await c.get_dialogs(limit=1)
-                    is_alive = True
-                    clients.append(c)
-                    client_sessions[c] = session_name
-                    print(f"[+] Сессия {session_name} онлайн: {me.first_name} ({acc.get('phone', '-')})", flush=True)
-        except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError, SessionExpiredError) as e:
-            death_reason = f"Бан/деактивация: {e}"
+                    # Тестовая отправка /start в целевого бота ваучеров
+                    can_start, start_err = await test_bot_start(c, target_bot)
+                    if not can_start:
+                        death_reason = f"Не удалось отправить /start в @{target_bot}: {start_err}"
+                    else:
+                        is_alive = True
+                        clients.append(c)
+                        client_sessions[c] = session_name
+                        print(f"[+] Сессия {session_name} онлайн: {me.first_name} ({acc.get('phone', '-')})", flush=True)
         except Exception as e:
-            err_str = str(e).lower()
-            if "restricted" in err_str or "deactivated" in err_str or "banned" in err_str:
-                death_reason = f"Заморозка/бан: {e}"
-            else:
-                print(f"[!] Временная ошибка сети у {session_name}: {e}", flush=True)
-                is_alive = True
-                clients.append(c)
-                client_sessions[c] = session_name
+            death_reason = str(e)
 
         if not is_alive:
             try:
                 await c.disconnect()
             except Exception:
                 pass
-            # Моментальное авто-удаление нерабочей сессии
-            purge_dead_account(session_name, death_reason)
+            move_to_trash(session_name, death_reason)
 
-    print(f"\n[✓] Итого живых аккаунтов: {len(clients)}", flush=True)
+    print(f"\n[✓] Итого активных аккаунтов: {len(clients)}", flush=True)
     print(f"[✓] Канал перехвата: @{source_channel}", flush=True)
     print(f"[✓] Целевой бот: @{target_bot}", flush=True)
 
     if not clients:
-        print("[!] Нет доступных аккаунтов для снайпинга.", flush=True)
+        print("[!] Нет доступных аккаунтов для перехвата.", flush=True)
         return
 
     print("[*] Кэшируем бота для быстрого залпа...", flush=True)
@@ -312,9 +339,9 @@ async def main():
                 digit = solve_math_equation(raw_text)
                 if digit is not None:
                     voucher_code = voucher_code.replace("*", digit)
-                    print(f"[⚡] Решено: x = {digit}! Ваучер: {voucher_code}", flush=True)
+                    print(f"[⚡] Решено: x = {digit}! Код: {voucher_code}", flush=True)
                 else:
-                    print(f"[ERR] Не удалось решить пример для {voucher_code}. Пропуск.", flush=True)
+                    print(f"[ERR] Не удалось решить уравнение для {voucher_code}. Пропуск.", flush=True)
                     return
 
             print(f"\n[!] ПОЙМАН ВАУЧЕР: {voucher_code}. Залп со всех {len(clients)} аккаунтов...", flush=True)
