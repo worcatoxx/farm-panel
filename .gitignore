@@ -1,5 +1,7 @@
 config.json
 accounts.json
+trash.json
+trash/
 *.session
 *.session-journal
 venv/
