@@ -4,6 +4,7 @@ set -e
 REPO_TOKEN="$1"
 REPO_URL="https://${REPO_TOKEN}@github.com/worcatoxx/farm-panel.git"
 INSTALL_DIR="/root/farm_panel"
+DATA_DIR="/root/farm_data"
 
 echo "=== [1/6] Подготовка системы и снятие блокировок ==="
 killall -9 apt apt-get dpkg unattended-upgr 2>/dev/null || true
@@ -15,7 +16,7 @@ apt-get update -y
 apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
     git python3 python3-pip python3-venv curl ufw iptables nginx
 
-echo "=== [2/6] Настройка сети и файрвола (Oracle Cloud + UFW) ==="
+echo "=== [2/6] Настройка сети и портов ==="
 iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
 iptables -I INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null || true
 if command -v ufw >/dev/null; then
@@ -34,16 +35,17 @@ else
     cd "$INSTALL_DIR"
 fi
 
-echo "=== [4/6] Установка зависимостей Python ==="
+echo "=== [4/6] Установка зависимостей и изоляция данных в /root/farm_data ==="
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install flask telethon requests
 
-# Начальные конфиги, если их еще не было
-if [ ! -f "config.json" ]; then
-    cat << 'EOF' > config.json
+mkdir -p "$DATA_DIR/trash"
+
+if [ ! -f "$DATA_DIR/config.json" ]; then
+    cat << 'EOF' > "$DATA_DIR/config.json"
 {
     "admin_user": "admin",
     "admin_pass": "superpass123",
@@ -55,9 +57,8 @@ if [ ! -f "config.json" ]; then
 EOF
 fi
 
-if [ ! -f "accounts.json" ]; then
-    echo "[]" > accounts.json
-fi
+[ ! -f "$DATA_DIR/accounts.json" ] && echo "[]" > "$DATA_DIR/accounts.json"
+[ ! -f "$DATA_DIR/trash.json" ] && echo "[]" > "$DATA_DIR/trash.json"
 
 echo "=== [5/6] Настройка Nginx и регистрация команды farm ==="
 cat << 'EOF' > /etc/nginx/sites-available/default
@@ -77,13 +78,12 @@ server {
 EOF
 systemctl restart nginx
 
-# Автоматически регистрируем утилиту farm в системе
 if [ -f "$INSTALL_DIR/farm.sh" ]; then
     cp -f "$INSTALL_DIR/farm.sh" /usr/local/bin/farm
     chmod +x /usr/local/bin/farm
 fi
 
-echo "=== [6/6] Настройка и запуск фоновых служб ==="
+echo "=== [6/6] Настройка фоновых служб ==="
 cat << 'EOF' > /etc/systemd/system/farmweb.service
 [Unit]
 Description=FarmBot Web Panel
@@ -131,5 +131,6 @@ echo "=================================================="
 echo " Установка завершена!"
 echo " Веб-панель: http://$IP (или :8080)"
 echo " Логин: admin | Пароль: superpass123"
-echo " Консольное меню управления: введите команду 'farm'"
+echo " Консольное меню управления: команда 'farm'"
+echo " Все данные теперь защищены в: /root/farm_data"
 echo "=================================================="
