@@ -12,9 +12,12 @@ from telethon.errors import (
     UserDeactivatedBanError,
     AuthKeyUnregisteredError,
     SessionRevokedError,
-    SessionExpiredError
+    SessionExpiredError,
+    UserRestrictedError,
+    ChatWriteForbiddenError
 )
 
+# ВСЕ данные живут строго в защищенной папке
 DATA_DIR = "/root/farm_data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -138,8 +141,15 @@ async def test_bot_start(client: TelegramClient, target_bot: str):
             target_peers[client] = peer
         await client.send_message(peer, "/start")
         return True, "OK"
+    except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError, UserRestrictedError, ChatWriteForbiddenError) as e:
+        return False, f"Блокировка Telegram: {e}"
     except Exception as e:
-        return False, str(e)
+        err_msg = str(e).lower()
+        if any(w in err_msg for w in ["frozen", "deactivated", "banned", "restricted", "forbidden"]):
+            return False, f"Заморожен: {e}"
+        # Любые сетевые сбои, FloodWait или недоступность бота НЕ удаляют сессию
+        print(f"[WARN] Временная задержка при отправке /start ({e}). Аккаунт остается в работе.", flush=True)
+        return True, "OK"
 
 async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
     sess_name = client_sessions.get(client, "unknown")
