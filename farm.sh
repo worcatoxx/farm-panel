@@ -49,12 +49,26 @@ while true; do
     show_menu
     case "$choice" in
         1)
-            echo -e "\n${YELLOW}[*] Обновление кода из GitHub...${PLAIN}"
+            echo -e "\n${YELLOW}[*] Сохранение конфигов и обновление кода...${PLAIN}"
             cd "$DIR" || exit 1
+            # Бэкапим рабочие файлы перед стягиванием
+            cp -f config.json /tmp/farm_cfg.bak 2>/dev/null || true
+            cp -f accounts.json /tmp/farm_acc.bak 2>/dev/null || true
+            cp -f trash.json /tmp/farm_trash.bak 2>/dev/null || true
+
             git fetch --all
             git reset --hard origin/main
+
+            # Возвращаем файлы на место
+            [ -f /tmp/farm_cfg.bak ] && cp -f /tmp/farm_cfg.bak config.json || true
+            [ -f /tmp/farm_acc.bak ] && cp -f /tmp/farm_acc.bak accounts.json || true
+            [ -f /tmp/farm_trash.bak ] && cp -f /tmp/farm_trash.bak trash.json || true
+
+            # Копируем свежий farm.sh в системную команду
+            cp -f "$DIR/farm.sh" /usr/local/bin/farm 2>/dev/null && chmod +x /usr/local/bin/farm || true
+
             systemctl restart farmbot farmweb
-            echo -e "${GREEN}[✓] Код обновлен, службы перезапущены!${PLAIN}"
+            echo -e "${GREEN}[✓] Код обновлен, настройки и сессии сохранены!${PLAIN}"
             read -p "Нажмите Enter для продолжения..."
             ;;
         2)
@@ -77,12 +91,12 @@ while true; do
             ;;
         5)
             clear
-            echo -e "${SKY}[*] Логи снайпера (Ctrl+C для выхода в меню):${PLAIN}\n"
+            echo -e "${SKY}[*] Логи снайпера (Ctrl+C для выхода):${PLAIN}\n"
             journalctl -u farmbot -f -n 50
             ;;
         6)
             clear
-            echo -e "${SKY}[*] Логи веб-панели (Ctrl+C для выхода в меню):${PLAIN}\n"
+            echo -e "${SKY}[*] Логи веб-панели (Ctrl+C для выхода):${PLAIN}\n"
             journalctl -u farmweb -f -n 50
             ;;
         7)
@@ -93,35 +107,30 @@ while true; do
             read -p "Нажмите Enter для продолжения..."
             ;;
         8)
-            echo -e "\n${YELLOW}[*] Очистка нерабочих сессий...${PLAIN}"
+            echo -e "\n${YELLOW}[*] Перезапуск бота с проверкой через /start в целевого бота...${PLAIN}"
             systemctl restart farmbot
-            echo -e "${GREEN}[✓] Бот запущен со встроенным авто-сканированием и очисткой.${PLAIN}"
+            echo -e "${GREEN}[✓] Мертвые сессии автоматически уйдут во вкладку Корзина.${PLAIN}"
             read -p "Нажмите Enter для продолжения..."
             ;;
         9)
-            echo -e "\n${RED}[!] Внимание: будет выполнена переустановка компонентов.${PLAIN}"
+            echo -e "\n${RED}[!] Будет выполнена переустановка с сохранением данных.${PLAIN}"
             echo -n "Продолжить? (y/N): "
             read -r confirm
             if [[ "$confirm" =~ ^[yY]$ ]]; then
-                echo -e "${YELLOW}[*] Создание бэкапа сессий и конфигурации...${PLAIN}"
                 mkdir -p /root/farm_backup
                 cp -f "$DIR"/config.json /root/farm_backup/ 2>/dev/null || true
                 cp -f "$DIR"/accounts.json /root/farm_backup/ 2>/dev/null || true
+                cp -f "$DIR"/trash.json /root/farm_backup/ 2>/dev/null || true
                 cp -f "$DIR"/*.session /root/farm_backup/ 2>/dev/null || true
 
-                echo -e "${YELLOW}[*] Запуск переустановки...${PLAIN}"
                 REPO_REMOTE=$(cd "$DIR" && git config --get remote.origin.url)
                 TOKEN=$(echo "$REPO_REMOTE" | sed -n 's#.*https://\([^@]*\)@.*#\1#p')
-                
                 curl -sSL -H "Authorization: token $TOKEN" https://raw.githubusercontent.com/worcatoxx/farm-panel/main/install.sh | bash -s -- "$TOKEN"
 
-                echo -e "${YELLOW}[*] Восстановление данных из бэкапа...${PLAIN}"
                 cp -rf /root/farm_backup/* "$DIR"/ 2>/dev/null || true
                 rm -rf /root/farm_backup
                 systemctl restart farmbot farmweb
-                echo -e "${GREEN}[✓] Переустановка завершена! Данные сохранены.${PLAIN}"
-            else
-                echo -e "${SKY}[*] Отменено.${PLAIN}"
+                echo -e "${GREEN}[✓] Переустановка завершена, данные на месте!${PLAIN}"
             fi
             read -p "Нажмите Enter для продолжения..."
             ;;
