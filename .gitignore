@@ -1,5 +1,7 @@
-venv/
-__pycache__/
+config.json
+accounts.json
 *.session
 *.session-journal
-accounts.json
+venv/
+__pycache__/
+*.pyc
