@@ -15,8 +15,7 @@ apt-get update -y
 apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
     git python3 python3-pip python3-venv curl ufw iptables nginx
 
-echo "=== [2/6] Настройка сети и файрвола (Oracle + UFW) ==="
-# Открываем порты 80, 443 и 8080 для веб-панели и Cloudflare
+echo "=== [2/6] Настройка сети и файрвола (Oracle Cloud + UFW) ==="
 iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
 iptables -I INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null || true
 if command -v ufw >/dev/null; then
@@ -24,7 +23,7 @@ if command -v ufw >/dev/null; then
     ufw allow 8080/tcp || true
 fi
 
-echo "=== [3/6] Клонирование / Обновление репозитория ==="
+echo "=== [3/6] Клонирование / Обновление проекта ==="
 if [ -d "$INSTALL_DIR/.git" ]; then
     cd "$INSTALL_DIR"
     git fetch --all
@@ -35,14 +34,14 @@ else
     cd "$INSTALL_DIR"
 fi
 
-echo "=== [4/6] Установка Python окружения и зависимостей ==="
+echo "=== [4/6] Установка зависимостей Python ==="
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 ./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt
+./venv/bin/pip install flask telethon requests
 
-# Создаем начальные файлы только если их еще не существует
+# Начальные конфиги, если их еще не было
 if [ ! -f "config.json" ]; then
     cat << 'EOF' > config.json
 {
@@ -60,7 +59,7 @@ if [ ! -f "accounts.json" ]; then
     echo "[]" > accounts.json
 fi
 
-echo "=== [5/6] Настройка Nginx (проксирование 80 -> 8080 для Cloudflare) ==="
+echo "=== [5/6] Настройка Nginx и регистрация команды farm ==="
 cat << 'EOF' > /etc/nginx/sites-available/default
 server {
     listen 80 default_server;
@@ -78,7 +77,13 @@ server {
 EOF
 systemctl restart nginx
 
-echo "=== [6/6] Создание и запуск системных служб ==="
+# Автоматически регистрируем утилиту farm в системе
+if [ -f "$INSTALL_DIR/farm.sh" ]; then
+    cp -f "$INSTALL_DIR/farm.sh" /usr/local/bin/farm
+    chmod +x /usr/local/bin/farm
+fi
+
+echo "=== [6/6] Настройка и запуск фоновых служб ==="
 cat << 'EOF' > /etc/systemd/system/farmweb.service
 [Unit]
 Description=FarmBot Web Panel
@@ -122,8 +127,9 @@ systemctl enable farmweb farmbot
 systemctl restart farmweb farmbot
 
 IP=$(curl -s https://api.ipify.org || echo "IP_СЕРВЕРА")
-echo "=========================================="
-echo " Установка успешно завершена!"
-echo " Панель доступна по адресу: http://$IP (или :8080)"
+echo "=================================================="
+echo " Установка завершена!"
+echo " Веб-панель: http://$IP (или :8080)"
 echo " Логин: admin | Пароль: superpass123"
-echo "=========================================="
+echo " Консольное меню управления: введите команду 'farm'"
+echo "=================================================="
