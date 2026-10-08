@@ -10,11 +10,16 @@ from flask import Flask, render_template, render_template_string, request, redir
 from telethon.sync import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
+# Код живет в BASE_DIR, а данные - в защищенной DATA_DIR
 BASE_DIR = "/root/farm_panel"
-CONFIG_FILE = os.path.join(BASE_DIR, "accounts.json")
-SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
-TRASH_FILE = os.path.join(BASE_DIR, "trash.json")
-TRASH_DIR = os.path.join(BASE_DIR, "trash")
+DATA_DIR = "/root/farm_data"
+os.makedirs(DATA_DIR, exist_ok=True)
+
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+ACCOUNTS_FILE = os.path.join(DATA_DIR, "accounts.json")
+TRASH_FILE = os.path.join(DATA_DIR, "trash.json")
+TRASH_DIR = os.path.join(DATA_DIR, "trash")
+os.makedirs(TRASH_DIR, exist_ok=True)
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.urandom(24)
@@ -30,10 +35,10 @@ def load_settings():
         "custom_domain": "",
         "nodes": []
     }
-    if not os.path.exists(SETTINGS_FILE):
+    if not os.path.exists(CONFIG_FILE):
         return default_settings
     try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             for k, v in default_settings.items():
                 data.setdefault(k, v)
@@ -42,20 +47,20 @@ def load_settings():
         return default_settings
 
 def save_settings(settings):
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=4, ensure_ascii=False)
 
 def load_accounts():
-    if not os.path.exists(CONFIG_FILE):
+    if not os.path.exists(ACCOUNTS_FILE):
         return []
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return []
 
 def save_accounts(accounts):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
         json.dump(accounts, f, indent=4, ensure_ascii=False)
 
 def load_trash():
@@ -71,7 +76,7 @@ def save_trash(trash):
     with open(TRASH_FILE, "w", encoding="utf-8") as f:
         json.dump(trash, f, indent=4, ensure_ascii=False)
 
-def move_acc_to_trash(session_name: str, reason: str = "Удален вручную"):
+def move_acc_to_trash(session_name: str, reason: str = "Удален вручную пользователем"):
     s_target = str(session_name).strip()
     accs = load_accounts()
     target = None
@@ -94,9 +99,8 @@ def move_acc_to_trash(session_name: str, reason: str = "Удален вручн�
     trash.append(target)
     save_trash(trash)
 
-    os.makedirs(TRASH_DIR, exist_ok=True)
     for ext in [".session", ".session-journal"]:
-        src = os.path.join(BASE_DIR, f"{s_target}{ext}")
+        src = os.path.join(DATA_DIR, f"{s_target}{ext}")
         dst = os.path.join(TRASH_DIR, f"{s_target}{ext}")
         if os.path.exists(src):
             try:
@@ -267,16 +271,14 @@ def restore_acc():
     if target:
         accs = load_accounts()
         accs = [a for a in accs if str(a.get("session")).strip() != sess_name]
-        # Очищаем сервисные метки корзины перед возвратом
         target.pop("trash_reason", None)
         target.pop("deleted_at", None)
         accs.append(target)
         save_accounts(accs)
 
-        # Возвращаем файл сессии на место
         for ext in [".session", ".session-journal"]:
             src = os.path.join(TRASH_DIR, f"{sess_name}{ext}")
-            dst = os.path.join(BASE_DIR, f"{sess_name}{ext}")
+            dst = os.path.join(DATA_DIR, f"{sess_name}{ext}")
             if os.path.exists(src):
                 try:
                     shutil.move(src, dst)
@@ -352,7 +354,7 @@ def start_phone_login():
     if not session_name or not phone or not api_id or not api_hash:
         return "Заполните все поля", 400
 
-    session_path = os.path.join(BASE_DIR, session_name)
+    session_path = os.path.join(DATA_DIR, session_name)
     kwargs = {
         "session": session_path,
         "api_id": int(api_id),
