@@ -5,20 +5,50 @@ import threading
 import urllib.request
 import base64
 import shutil
+import asyncio
 from datetime import datetime
 from flask import Flask, render_template, render_template_string, request, redirect, session, jsonify
-from telethon.sync import TelegramClient
-from telethon.errors import SessionPasswordNeededError
+from telethon import TelegramClient
+from telethon.tl.types.auth import SentCodeTypeApp, SentCodeTypeSms, SentCodeTypeCall, SentCodeTypeFlashCall
+from telethon.errors import (
+    SessionPasswordNeededError,
+    PhoneCodeInvalidError,
+    PhoneCodeExpiredError,
+    PasswordHashInvalidError,
+    FloodWaitError,
+    PhoneNumberInvalidError,
+    PhoneNumberBannedError
+)
 
 BASE_DIR = "/root/farm_panel"
 DATA_DIR = "/root/farm_data"
+os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
-CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
-ACCOUNTS_FILE = os.path.join(DATA_DIR, "accounts.json")
-TRASH_FILE = os.path.join(DATA_DIR, "trash.json")
-TRASH_DIR = os.path.join(DATA_DIR, "trash")
+CONFIG_FILE = os.path.join(BASE_DIR, "accounts.json")
+BACKUP_CONFIG_FILE = os.path.join(DATA_DIR, "accounts.json")
+
+SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
+BACKUP_SETTINGS_FILE = os.path.join(DATA_DIR, "config.json")
+
+TRASH_FILE = os.path.join(BASE_DIR, "trash.json")
+BACKUP_TRASH_FILE = os.path.join(DATA_DIR, "trash.json")
+
+TRASH_DIR = os.path.join(BASE_DIR, "trash")
+BACKUP_TRASH_DIR = os.path.join(DATA_DIR, "trash")
 os.makedirs(TRASH_DIR, exist_ok=True)
+os.makedirs(BACKUP_TRASH_DIR, exist_ok=True)
+
+tg_loop = asyncio.new_event_loop()
+def _start_tg_loop(loop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+threading.Thread(target=_start_tg_loop, args=(tg_loop,), daemon=True).start()
+
+def run_tg(coro):
+    future = asyncio.run_coroutine_threadsafe(coro, tg_loop)
+    return future.result(timeout=60)
 
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.urandom(24)
@@ -31,13 +61,14 @@ def load_settings():
         "admin_pass": "superpass123",
         "source_channel": "vaycher_virtnumber",
         "target_bot": "Virtnumber_buy_bot",
-        "custom_domain": "",
+        "custom_domain": "farm.696752.xyz",
         "nodes": []
     }
-    if not os.path.exists(CONFIG_FILE):
+    target_f = SETTINGS_FILE if (os.path.exists(SETTINGS_FILE) and os.path.getsize(SETTINGS_FILE) > 10) else BACKUP_SETTINGS_FILE
+    if not os.path.exists(target_f):
         return default_settings
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(target_f, "r", encoding="utf-8") as f:
             data = json.load(f)
             for k, v in default_settings.items():
                 data.setdefault(k, v)
@@ -46,36 +77,56 @@ def load_settings():
         return default_settings
 
 def save_settings(settings):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(settings, f, indent=4, ensure_ascii=False)
+    for path in [SETTINGS_FILE, BACKUP_SETTINGS_FILE]:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(settings, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
 
 def load_accounts():
-    if not os.path.exists(ACCOUNTS_FILE):
-        return []
-    try:
-        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    accs = []
+    for path in [CONFIG_FILE, BACKUP_CONFIG_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = json.load(f)
+                    if len(content) > len(accs):
+                        accs = content
+            except Exception:
+                pass
+    return accs
 
 def save_accounts(accounts):
-    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(accounts, f, indent=4, ensure_ascii=False)
+    for path in [CONFIG_FILE, BACKUP_CONFIG_FILE]:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(accounts, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
 
 def load_trash():
-    if not os.path.exists(TRASH_FILE):
-        return []
-    try:
-        with open(TRASH_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    trash = []
+    for path in [TRASH_FILE, BACKUP_TRASH_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = json.load(f)
+                    if len(content) > len(trash):
+                        trash = content
+            except Exception:
+                pass
+    return trash
 
 def save_trash(trash):
-    with open(TRASH_FILE, "w", encoding="utf-8") as f:
-        json.dump(trash, f, indent=4, ensure_ascii=False)
+    for path in [TRASH_FILE, BACKUP_TRASH_FILE]:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(trash, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
 
-def move_acc_to_trash(session_name: str, reason: str = "Удален вручную пользователем"):
+def move_acc_to_trash(session_name: str, reason: str = "Удален вручную"):
     s_target = str(session_name).strip()
     accs = load_accounts()
     target = None
@@ -98,14 +149,16 @@ def move_acc_to_trash(session_name: str, reason: str = "Удален вручн�
     trash.append(target)
     save_trash(trash)
 
-    for ext in [".session", ".session-journal"]:
-        src = os.path.join(DATA_DIR, f"{s_target}{ext}")
-        dst = os.path.join(TRASH_DIR, f"{s_target}{ext}")
-        if os.path.exists(src):
-            try:
-                shutil.move(src, dst)
-            except Exception:
-                pass
+    for base in [BASE_DIR, DATA_DIR]:
+        t_dir = os.path.join(base, "trash")
+        for ext in [".session", ".session-journal"]:
+            src = os.path.join(base, f"{s_target}{ext}")
+            dst = os.path.join(t_dir, f"{s_target}{ext}")
+            if os.path.exists(src):
+                try:
+                    shutil.move(src, dst)
+                except Exception:
+                    pass
 
 def get_server_ips():
     primary_ip = None
@@ -247,11 +300,147 @@ def index():
         trash_accs=trash_accs
     )
 
-@app.route("/delete", methods=["POST"])
-def delete_acc():
-    sess_name = request.form.get("session_name")
-    if sess_name:
-        move_acc_to_trash(sess_name, "Удален вручную пользователем")
+async def _do_start(session_path, api_id, api_hash, phone, bind_ip):
+    kwargs = {
+        "api_id": api_id,
+        "api_hash": api_hash,
+        "loop": tg_loop,
+        "device_model": "Desktop x64",
+        "system_version": "Windows 11",
+        "app_version": "5.5.1 x64",
+        "lang_code": "ru",
+        "system_lang_code": "ru-RU"
+    }
+    if bind_ip:
+        if ":" in bind_ip:
+            kwargs["use_ipv6"] = True
+        kwargs["local_addr"] = (bind_ip, 0)
+
+    for ext in [".session", ".session-journal"]:
+        p = f"{session_path}{ext}"
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except Exception:
+                pass
+
+    client = TelegramClient(session_path, **kwargs)
+    await client.connect()
+    sent = await client.send_code_request(phone)
+    
+    delivery = "в приложение Telegram"
+    if isinstance(sent.type, SentCodeTypeSms):
+        delivery = "по SMS на телефон (проверь СМС)"
+    elif isinstance(sent.type, SentCodeTypeCall):
+        delivery = "звонком на телефон"
+    elif isinstance(sent.type, SentCodeTypeFlashCall):
+        delivery = "через Flash Call"
+
+    return client, sent.phone_code_hash, delivery
+
+async def _do_finish(client, phone, code, code_hash, pwd):
+    try:
+        await client.sign_in(phone=phone, code=code, phone_code_hash=code_hash)
+    except SessionPasswordNeededError:
+        if pwd:
+            await client.sign_in(password=pwd)
+        else:
+            raise SessionPasswordNeededError("Требуется облачный 2FA пароль")
+    await client.disconnect()
+
+@app.route("/start-phone-login", methods=["POST"])
+def start_phone_login():
+    session_name = request.form.get("session_name", "").strip()
+    phone = request.form.get("phone", "").strip().replace(" ", "").replace("-", "")
+    api_id = request.form.get("api_id", "").strip()
+    api_hash = request.form.get("api_hash", "").strip()
+    bind_ip = request.form.get("bind_ip", "").strip()
+
+    if not session_name or not phone or not api_id or not api_hash:
+        return "Заполните все поля", 400
+
+    session_path = os.path.join(BASE_DIR, session_name)
+    try:
+        client, code_hash, delivery = run_tg(_do_start(session_path, int(api_id), api_hash, phone, bind_ip))
+        login_sessions[session_name] = {
+            "client": client,
+            "session_name": session_name,
+            "phone": phone,
+            "api_id": int(api_id),
+            "api_hash": api_hash,
+            "bind_ip": bind_ip,
+            "phone_code_hash": code_hash
+        }
+    except FloodWaitError as e:
+        return f"<h3>Telegram временно ограничил отправку кодов (FloodWait). Подождите {e.seconds} секунд.</h3><br><a href='/'>Назад</a>", 429
+    except (PhoneNumberInvalidError, PhoneNumberBannedError) as e:
+        return f"<h3>Номер заблокирован или неверен: {e}</h3><br><a href='/'>Назад</a>", 400
+    except Exception as e:
+        return f"<h3>Ошибка при запросе кода: {e}</h3><br><a href='/'>Назад</a>", 400
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="ru"><head><meta charset="UTF-8"><title>Подтверждение Telegram</title><script src="https://cdn.tailwindcss.com"></script></head>
+    <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full">
+            <h2 class="text-base font-bold mb-2">Код подтверждения</h2>
+            <p class="text-xs text-slate-400 mb-1">Код отправлен на <span class="text-sky-400 font-mono">{phone}</span></p>
+            <p class="text-xs text-amber-400 mb-4">Способ доставки: <b>{delivery}</b></p>
+            <form action="/finish-phone-login" method="post" class="flex flex-col gap-3">
+                <input type="hidden" name="session_name" value="{session_name}">
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Код подтверждения</label>
+                    <input name="code" placeholder="12345" required autofocus class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none font-mono">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">2FA пароль (если установлен)</label>
+                    <input name="password" type="password" placeholder="Пароль 2FA" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none">
+                </div>
+                <button type="submit" class="mt-2 w-full bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition">Подтвердить</button>
+            </form>
+        </div>
+    </body></html>
+    """
+
+@app.route("/finish-phone-login", methods=["POST"])
+def finish_phone_login():
+    session_name = request.form.get("session_name", "").strip()
+    code = request.form.get("code", "").strip()
+    pwd = request.form.get("password", "").strip()
+
+    data = login_sessions.get(session_name)
+    if not data:
+        return "Сессия авторизации не найдена. Попробуйте снова с главной страницы. <br><a href='/'>Назад</a>", 400
+
+    client = data["client"]
+    try:
+        run_tg(_do_finish(client, data["phone"], code, data["phone_code_hash"], pwd))
+    except SessionPasswordNeededError:
+        return "На аккаунте установлен 2FA пароль. Введите его в поле формы. <br><a href='javascript:history.back()'>Назад</a>", 400
+    except Exception as e:
+        return f"Ошибка при вводе кода: {e} <br><a href='javascript:history.back()'>Назад</a>", 400
+
+    del login_sessions[session_name]
+
+    for ext in [".session", ".session-journal"]:
+        src = os.path.join(BASE_DIR, f"{session_name}{ext}")
+        dst = os.path.join(DATA_DIR, f"{session_name}{ext}")
+        if os.path.exists(src):
+            try:
+                shutil.copy2(src, dst)
+            except Exception:
+                pass
+
+    accs = load_accounts()
+    accs = [a for a in accs if str(a.get("session")).strip() != session_name]
+    accs.append({
+        "session": session_name,
+        "phone": data["phone"],
+        "api_id": data["api_id"],
+        "api_hash": data["api_hash"],
+        "bind_ip": data["bind_ip"]
+    })
+    save_accounts(accs)
     return redirect("/")
 
 @app.route("/trash/restore", methods=["POST"])
@@ -275,14 +464,16 @@ def restore_acc():
         accs.append(target)
         save_accounts(accs)
 
-        for ext in [".session", ".session-journal"]:
-            src = os.path.join(TRASH_DIR, f"{sess_name}{ext}")
-            dst = os.path.join(DATA_DIR, f"{sess_name}{ext}")
-            if os.path.exists(src):
-                try:
-                    shutil.move(src, dst)
-                except Exception:
-                    pass
+        for base in [BASE_DIR, DATA_DIR]:
+            t_dir = os.path.join(base, "trash")
+            for ext in [".session", ".session-journal"]:
+                src = os.path.join(t_dir, f"{sess_name}{ext}")
+                dst = os.path.join(base, f"{sess_name}{ext}")
+                if os.path.exists(src):
+                    try:
+                        shutil.move(src, dst)
+                    except Exception:
+                        pass
 
     return redirect("/?tab=trash")
 
@@ -293,25 +484,36 @@ def delete_trash_permanent():
     trash = [t for t in trash if str(t.get("session")).strip() != sess_name]
     save_trash(trash)
 
-    for ext in [".session", ".session-journal"]:
-        fpath = os.path.join(TRASH_DIR, f"{sess_name}{ext}")
-        if os.path.exists(fpath):
-            try:
-                os.remove(fpath)
-            except Exception:
-                pass
+    for base in [BASE_DIR, DATA_DIR]:
+        t_dir = os.path.join(base, "trash")
+        for ext in [".session", ".session-journal"]:
+            fpath = os.path.join(t_dir, f"{sess_name}{ext}")
+            if os.path.exists(fpath):
+                try:
+                    os.remove(fpath)
+                except Exception:
+                    pass
     return redirect("/?tab=trash")
 
 @app.route("/trash/clear", methods=["POST"])
 def clear_all_trash():
     save_trash([])
-    if os.path.exists(TRASH_DIR):
-        try:
-            shutil.rmtree(TRASH_DIR)
-            os.makedirs(TRASH_DIR, exist_ok=True)
-        except Exception:
-            pass
+    for base in [BASE_DIR, DATA_DIR]:
+        t_dir = os.path.join(base, "trash")
+        if os.path.exists(t_dir):
+            try:
+                shutil.rmtree(t_dir)
+                os.makedirs(t_dir, exist_ok=True)
+            except Exception:
+                pass
     return redirect("/?tab=trash")
+
+@app.route("/delete", methods=["POST"])
+def delete_acc():
+    sess_name = request.form.get("session_name")
+    if sess_name:
+        move_acc_to_trash(sess_name, "Удален вручную")
+    return redirect("/")
 
 @app.route("/node/add", methods=["POST"])
 def add_node():
@@ -341,105 +543,6 @@ def delete_node():
         settings["nodes"] = nodes
         save_settings(settings)
     return redirect("/?tab=settings")
-
-@app.route("/start-phone-login", methods=["POST"])
-def start_phone_login():
-    session_name = request.form.get("session_name", "").strip()
-    phone = request.form.get("phone", "").strip()
-    api_id = request.form.get("api_id", "").strip()
-    api_hash = request.form.get("api_hash", "").strip()
-    bind_ip = request.form.get("bind_ip", "").strip()
-
-    if not session_name or not phone or not api_id or not api_hash:
-        return "Заполните все поля", 400
-
-    session_path = os.path.join(DATA_DIR, session_name)
-    kwargs = {
-        "session": session_path,
-        "api_id": int(api_id),
-        "api_hash": api_hash
-    }
-    if bind_ip:
-        if ":" in bind_ip:
-            kwargs["use_ipv6"] = True
-        kwargs["local_addr"] = (bind_ip, 0)
-
-    try:
-        client = TelegramClient(**kwargs)
-        client.connect()
-        sent = client.send_code_request(phone)
-        login_sessions[session_name] = {
-            "client": client,
-            "phone": phone,
-            "api_id": int(api_id),
-            "api_hash": api_hash,
-            "bind_ip": bind_ip,
-            "phone_code_hash": sent.phone_code_hash
-        }
-    except Exception as e:
-        return f"<h3>Ошибка: {e}</h3><br><a href='/'>Назад</a>", 400
-
-    return f"""
-    <!DOCTYPE html>
-    <html lang="ru"><head><meta charset="UTF-8"><title>Подтверждение Telegram</title><script src="https://cdn.tailwindcss.com"></script></head>
-    <body class="bg-slate-950 text-white flex items-center justify-center min-h-screen">
-        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full">
-            <h2 class="text-base font-bold mb-2">Код подтверждения</h2>
-            <p class="text-xs text-slate-400 mb-4">Код отправлен на <span class="text-sky-400">{phone}</span></p>
-            <form action="/finish-phone-login" method="post" class="flex flex-col gap-3">
-                <input type="hidden" name="session_name" value="{session_name}">
-                <div>
-                    <label class="text-xs text-slate-400 block mb-1">Код из Telegram</label>
-                    <input name="code" placeholder="12345" required autofocus class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none font-mono">
-                </div>
-                <div>
-                    <label class="text-xs text-slate-400 block mb-1">2FA пароль (если есть)</label>
-                    <input name="password" type="password" placeholder="Пароль 2FA" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none">
-                </div>
-                <button type="submit" class="mt-2 w-full bg-sky-600 hover:bg-sky-500 font-medium py-2.5 rounded-lg text-xs transition">Подтвердить</button>
-            </form>
-        </div>
-    </body></html>
-    """
-
-@app.route("/finish-phone-login", methods=["POST"])
-def finish_phone_login():
-    session_name = request.form.get("session_name", "").strip()
-    code = request.form.get("code", "").strip()
-    pwd = request.form.get("password", "").strip()
-
-    data = login_sessions.get(session_name)
-    if not data:
-        return "Сессия авторизации не найдена. <a href='/'>Назад</a>", 400
-
-    client = data["client"]
-    try:
-        client.sign_in(phone=data["phone"], code=code, phone_code_hash=data["phone_code_hash"])
-    except SessionPasswordNeededError:
-        if pwd:
-            try:
-                client.sign_in(password=pwd)
-            except Exception as e:
-                return f"Неверный пароль 2FA: {e} <br><a href='/'>Назад</a>", 400
-        else:
-            return "Требуется 2FA пароль. Введите его при повторной попытке. <br><a href='/'>Назад</a>", 400
-    except Exception as e:
-        return f"Ошибка при вводе кода: {e} <br><a href='/'>Назад</a>", 400
-
-    client.disconnect()
-    del login_sessions[session_name]
-
-    accs = load_accounts()
-    accs = [a for a in accs if a["session"] != session_name]
-    accs.append({
-        "session": session_name,
-        "phone": data["phone"],
-        "api_id": data["api_id"],
-        "api_hash": data["api_hash"],
-        "bind_ip": data["bind_ip"]
-    })
-    save_accounts(accs)
-    return redirect("/")
 
 @app.route("/settings/save", methods=["POST"])
 def save_settings_route():
