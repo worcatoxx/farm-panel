@@ -3,12 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FarmBot Sniper — Панель управления</title>
-    <!-- Google Fonts: Inter -->
+    <title>FarmBot Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS CDN -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -20,7 +18,6 @@
                     },
                     colors: {
                         brand: {
-                            50: '#f5f3ff',
                             400: '#a78bfa',
                             500: '#8b5cf6',
                             600: '#7c3aed',
@@ -41,16 +38,23 @@
         ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
         * { scrollbar-width: thin; scrollbar-color: #27272a #09090b; }
+
+        /* Стример / Приватный режим */
+        body.privacy-mode .mask-privacy {
+            filter: blur(5px);
+            user-select: none;
+            transition: filter 0.2s;
+        }
+        body.privacy-mode .mask-privacy:hover {
+            filter: blur(0px);
+        }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col antialiased selection:bg-brand-600 selection:text-white ambient-glow relative">
 
-    <!-- Тост-уведомления -->
-    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
-
     <header class="sticky top-0 z-40 w-full backdrop-blur-md bg-zinc-950/80 border-b border-zinc-800/80 transition-all">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-            <!-- Логотип и статус -->
+            <!-- Логотип и хост -->
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white font-bold shadow-lg shadow-brand-500/20">
                     <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
@@ -58,17 +62,23 @@
                 <div>
                     <div class="flex items-center gap-2">
                         <span class="font-bold text-sm tracking-tight text-white">FarmBot <span class="text-brand-400">Sniper</span></span>
-                        <span class="text-[10px] bg-brand-500/10 text-brand-400 border border-brand-500/20 px-2 py-0.5 rounded-full font-medium">v2.4</span>
+                        <span class="text-[10px] bg-brand-500/10 text-brand-400 border border-brand-500/20 px-2 py-0.5 rounded-full font-medium">v2.5</span>
                     </div>
-                    <p class="text-[11px] text-zinc-400 font-mono">{{ current_display_host }}</p>
+                    <p class="text-[11px] text-zinc-400 font-mono mask-privacy">{{ current_display_host }}</p>
                 </div>
             </div>
 
-            <!-- Верхнее меню управления -->
-            <div class="flex flex-wrap items-center gap-2.5">
-                <!-- Селектор серверов нод -->
-                <select onchange="if(this.value) window.open(this.value, '_blank')" class="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded-xl px-3 py-1.5 outline-none hover:border-zinc-700 transition cursor-pointer">
-                    <option value="">🖥️ Текущий VPS (Этот сервер)</option>
+            <!-- Управление и массовые действия -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Кнопка режима стримера -->
+                <button onclick="togglePrivacyMode()" id="privacy-btn" class="px-3 py-1.5 text-xs font-medium rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition flex items-center gap-1.5" title="Скрыть/показать IP и номера на экране">
+                    <span id="privacy-icon">👁️</span>
+                    <span id="privacy-text" class="hidden sm:inline">Скрыть данные</span>
+                </button>
+
+                <!-- Выбор ноды -->
+                <select onchange="if(this.value) window.open(this.value, '_blank')" class="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded-xl px-2.5 py-1.5 outline-none hover:border-zinc-700 transition cursor-pointer">
+                    <option value="">🖥️ Этот VPS</option>
                     {% for node in linked_nodes %}
                         <option value="{{ node.url }}">🔗 {{ node.name }}</option>
                     {% endfor %}
@@ -86,24 +96,26 @@
                     <button onclick="switchTab('settings')" id="tab-btn-settings" class="px-3 py-1 text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition">Настройки</button>
                 </div>
 
-                <!-- Статус сервиса -->
-                <div class="hidden sm:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl text-xs font-mono">
-                    <span class="w-2 h-2 rounded-full {% if service_status == 'active' %}bg-emerald-400 animate-pulse{% else %}bg-amber-400{% endif %}"></span>
-                    <span class="uppercase text-[11px] font-semibold text-zinc-300">{{ service_status }}</span>
+                <!-- Массовые действия со всеми серверами -->
+                <div class="flex items-center gap-1.5">
+                    <form action="/accounts/check-balance-all" method="post" class="m-0" title="Запросить /balance на всех VPS">
+                        <button type="submit" class="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-emerald-400 px-2.5 py-1.5 rounded-xl text-xs font-medium transition active:scale-95 flex items-center gap-1">
+                            💰 Все балансы
+                        </button>
+                    </form>
+
+                    <form action="/accounts/check-health-all" method="post" class="m-0" onsubmit="return confirm('Отправить тестовый /start со всех аккаунтов на всех VPS?')" title="Проверить все VPS через /start бота">
+                        <button type="submit" class="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-amber-400 px-2.5 py-1.5 rounded-xl text-xs font-medium transition active:scale-95 flex items-center gap-1">
+                            🩺 Чек всех
+                        </button>
+                    </form>
+
+                    <form action="/service/restart-all" method="post" class="m-0" title="Перезапустить службы на всех привязанных VPS">
+                        <button type="submit" class="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-xl text-xs font-medium transition shadow-md shadow-brand-600/20 active:scale-95 flex items-center gap-1">
+                            ⚡ Все VPS
+                        </button>
+                    </form>
                 </div>
-
-                <!-- Кнопки перезапуска -->
-                <form action="/service/restart" method="post" class="m-0">
-                    <button type="submit" class="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-xl text-xs font-medium transition active:scale-95">
-                        Рестарт
-                    </button>
-                </form>
-
-                <form action="/service/restart-all" method="post" class="m-0">
-                    <button type="submit" class="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-xl text-xs font-medium transition shadow-md shadow-brand-600/20 active:scale-95 flex items-center gap-1">
-                        ⚡ Все VPS
-                    </button>
-                </form>
 
                 <a href="/logout" class="p-2 text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition" title="Выйти">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
@@ -115,41 +127,53 @@
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- ВКЛАДКА: ГЛАВНАЯ -->
         <div id="tab-main" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Левая колонка: Форма авторизации -->
+            <!-- Левая колонка: Добавление аккаунта -->
             <div class="lg:col-span-1">
                 <div class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
                     <div class="flex items-center gap-2 mb-4">
                         <div class="w-2 h-2 rounded-full bg-brand-400"></div>
                         <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Подключить аккаунт</h2>
                     </div>
-                    
+
                     <form action="/start-phone-login" method="post" class="flex flex-col gap-3.5">
                         <div>
-                            <label class="text-[11px] font-medium text-zinc-400 block mb-1">Имя профиля (сессии)</label>
-                            <input name="session_name" placeholder="acc_1" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition font-mono">
+                            <label class="text-[11px] font-medium text-zinc-400 block mb-1">Имя профиля (опционально)</label>
+                            <input name="session_name" placeholder="Автоматически из Telegram" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:border-brand-500 outline-none transition font-mono">
+                            <span class="text-[10px] text-zinc-500 mt-0.5 block">Если оставить пустым, подтянется имя профиля</span>
                         </div>
+
                         <div>
                             <label class="text-[11px] font-medium text-zinc-400 block mb-1">Номер телефона</label>
-                            <input name="phone" placeholder="+1234567890" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition font-mono">
+                            <input name="phone" placeholder="+1234567890" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:border-brand-500 outline-none transition font-mono mask-privacy">
                         </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="text-[11px] font-medium text-zinc-400 block mb-1">API ID</label>
-                                <input name="api_id" value="2040" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-500 outline-none transition font-mono">
-                            </div>
-                            <div>
-                                <label class="text-[11px] font-medium text-zinc-400 block mb-1">API Hash</label>
-                                <input name="api_hash" value="b18441a1ff607e10a989891a5462e627" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-500 outline-none transition font-mono">
+
+                        <!-- Переключатель своих API ключей -->
+                        <div class="pt-1">
+                            <label class="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">
+                                <input type="checkbox" id="custom-api-toggle" onchange="document.getElementById('custom-api-fields').classList.toggle('hidden', !this.checked)" class="rounded bg-zinc-950 border-zinc-800 text-brand-600 focus:ring-0">
+                                <span>Свои API ID и API Hash</span>
+                            </label>
+                            <div id="custom-api-fields" class="hidden grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-zinc-800/50">
+                                <div>
+                                    <label class="text-[10px] text-zinc-500 block mb-1">API ID</label>
+                                    <input name="api_id" value="2040" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono outline-none">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-zinc-500 block mb-1">API Hash</label>
+                                    <input name="api_hash" value="b18441a1ff607e10a989891a5462e627" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono outline-none">
+                                </div>
                             </div>
                         </div>
+
                         <div>
-                            <label class="text-[11px] font-medium text-zinc-400 block mb-1">Исходящий IP (Сетевой интерфейс)</label>
-                            <select name="bind_ip" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:border-brand-500 outline-none transition">
+                            <label class="text-[11px] font-medium text-zinc-400 block mb-1">Исходящий IP сервера</label>
+                            <select name="bind_ip" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:border-brand-500 outline-none transition mask-privacy">
                                 {% for ip in available_ips %}
                                     <option value="{{ ip.val }}">{{ ip.label }}</option>
                                 {% endfor %}
                             </select>
                         </div>
+
                         <button type="submit" class="mt-2 w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-xs shadow-md shadow-brand-600/25 transition active:scale-95 flex items-center justify-center gap-2">
                             <span>Запросить код подтверждения</span>
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
@@ -158,16 +182,32 @@
                 </div>
             </div>
 
-            <!-- Правая колонка: Карточки IP адресов и консоль -->
+            <!-- Правая колонка: Карточки IP и консоль -->
             <div class="lg:col-span-2 flex flex-col gap-6">
                 {% for group in ip_groups %}
                 <div class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
                     <div class="flex justify-between items-center mb-4">
                         <div class="flex items-center gap-2.5">
                             <span class="w-2.5 h-2.5 rounded-full {% if group.color == 'amber' %}bg-amber-400 shadow-sm shadow-amber-400/50{% else %}bg-brand-400 shadow-sm shadow-brand-400/50{% endif %}"></span>
-                            <span class="text-xs font-semibold tracking-wider uppercase text-zinc-200">{{ group.title }}</span>
+                            <span class="text-xs font-semibold tracking-wider uppercase text-zinc-200">
+                                {% if loop.index0 == 0 %}ОСНОВНОЙ IP:{% else %}ДОПОЛНИТЕЛЬНЫЙ IP:{% endif %}
+                                <span class="font-mono mask-privacy ml-1">{{ group.ip }}</span>
+                            </span>
                         </div>
-                        <span class="text-[11px] font-mono bg-zinc-800/80 px-2.5 py-0.5 rounded-md text-zinc-400 border border-zinc-700/50">Сессий: {{ group.accounts|length }}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[11px] font-mono bg-zinc-800/80 px-2 py-0.5 rounded-md text-zinc-400 border border-zinc-700/50">Ботов: {{ group.accounts|length }}</span>
+                            <!-- Кнопка обновления баланса конкретно для этого инстанса -->
+                            <form action="/accounts/check-balance" method="post" class="m-0">
+                                <button type="submit" class="text-[11px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 rounded-md transition" title="Запросить баланс в боте">
+                                    💰 Обновить балансы
+                                </button>
+                            </form>
+                            <form action="/accounts/check-health" method="post" class="m-0" onsubmit="return confirm('Проверить аккаунты на этом IP отправкой /start?')">
+                                <button type="submit" class="text-[11px] px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 rounded-md transition" title="Проверить доступность /start">
+                                    🩺 Чек /start
+                                </button>
+                            </form>
+                        </div>
                     </div>
 
                     {% if group.accounts %}
@@ -177,6 +217,7 @@
                                 <tr class="text-zinc-500 border-b border-zinc-800/80 pb-2">
                                     <th class="pb-2 font-medium">Сессия</th>
                                     <th class="pb-2 font-medium">Телефон</th>
+                                    <th class="pb-2 font-medium text-emerald-400">Баланс в боте</th>
                                     <th class="pb-2 font-medium text-right">Действие</th>
                                 </tr>
                             </thead>
@@ -184,7 +225,10 @@
                                 {% for acc in group.accounts %}
                                 <tr class="hover:bg-zinc-800/30 transition-colors">
                                     <td class="py-2.5 font-medium text-zinc-200">{{ acc.session }}</td>
-                                    <td class="py-2.5 font-mono text-brand-400">{{ acc.phone or '-' }}</td>
+                                    <td class="py-2.5 font-mono text-brand-400 mask-privacy">{{ acc.phone or '-' }}</td>
+                                    <td class="py-2.5 font-mono font-semibold text-emerald-400">
+                                        {{ acc.balance or '0.00' }} ₽
+                                    </td>
                                     <td class="py-2.5 text-right">
                                         <form action="/delete" method="post" onsubmit="return confirm('Отправить сессию в корзину?')" class="m-0">
                                             <input type="hidden" name="session_name" value="{{ acc.session }}">
@@ -209,7 +253,7 @@
                             <span class="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
                             <span class="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></span>
                             <span class="w-2.5 h-2.5 rounded-full bg-green-500/80"></span>
-                            <span class="ml-2 text-zinc-400 text-[11px]">farmbot.service — journalctl live</span>
+                            <span class="ml-2 text-zinc-400 text-[11px]">farmbot.service — live journal</span>
                         </div>
                         <button onclick="fetchLogs(true)" class="text-[11px] text-brand-400 hover:text-brand-300 transition">Обновить</button>
                     </div>
@@ -252,7 +296,7 @@
                             {% for t in trash_accs %}
                             <tr class="hover:bg-zinc-800/30 transition">
                                 <td class="p-3 font-semibold text-zinc-200">{{ t.session }}</td>
-                                <td class="p-3 font-mono text-brand-400">{{ t.phone or '-' }}</td>
+                                <td class="p-3 font-mono text-brand-400 mask-privacy">{{ t.phone or '-' }}</td>
                                 <td class="p-3 text-[11px] text-amber-400 max-w-xs truncate" title="{{ t.trash_reason }}">{{ t.trash_reason or 'Неизвестно' }}</td>
                                 <td class="p-3 text-right">
                                     <div class="flex items-center justify-end gap-2">
@@ -286,7 +330,7 @@
                 <div class="flex items-center justify-between mb-4">
                     <div>
                         <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Связанные серверы (VPS)</h2>
-                        <p class="text-xs text-zinc-400">Сеть нод для быстрого переключения и массового перезапуска фермы</p>
+                        <p class="text-xs text-zinc-400">Сеть нод для переключения, массовой проверки балансов и рестарта</p>
                     </div>
                     <span class="text-xs bg-zinc-800 text-brand-400 px-2.5 py-1 rounded-md border border-zinc-700 font-mono">Узлов: {{ linked_nodes|length }}</span>
                 </div>
@@ -297,7 +341,7 @@
                         <thead class="bg-zinc-950 text-zinc-400 font-medium">
                             <tr>
                                 <th class="p-3">Название</th>
-                                <th class="p-3">URL</th>
+                                <th class="p-3">Адрес</th>
                                 <th class="p-3">Логин</th>
                                 <th class="p-3 text-right">Действие</th>
                             </tr>
@@ -306,7 +350,7 @@
                             {% for node in linked_nodes %}
                             <tr class="hover:bg-zinc-800/30 transition">
                                 <td class="p-3 font-semibold text-white">{{ node.name }}</td>
-                                <td class="p-3 font-mono text-brand-400">
+                                <td class="p-3 font-mono text-brand-400 mask-privacy">
                                     <a href="{{ node.url }}" target="_blank" class="hover:underline">{{ node.url }}</a>
                                 </td>
                                 <td class="p-3 text-zinc-400 font-mono">{{ node.user }}</td>
@@ -329,11 +373,11 @@
                     <form action="/node/add" method="post" class="grid grid-cols-1 md:grid-cols-4 gap-3">
                         <div>
                             <label class="text-[10px] text-zinc-400 block mb-1">Имя сервера</label>
-                            <input name="node_name" placeholder="VPS 2 (Германия)" required class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500">
+                            <input name="node_name" placeholder="VPS 2" required class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500">
                         </div>
                         <div>
-                            <label class="text-[10px] text-zinc-400 block mb-1">Адрес (URL с портом)</label>
-                            <input name="node_url" placeholder="http://158.180.34.166:8080" required class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-brand-500">
+                            <label class="text-[10px] text-zinc-400 block mb-1">IP или домен</label>
+                            <input name="node_url" placeholder="158.180.34.166" required class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-brand-500">
                         </div>
                         <div>
                             <label class="text-[10px] text-zinc-400 block mb-1">Логин</label>
@@ -356,7 +400,7 @@
                 <form action="/settings/save" method="post" class="flex flex-col gap-4">
                     <div>
                         <label class="text-xs text-zinc-400 block mb-1">Кастомный домен</label>
-                        <input name="custom_domain" value="{{ settings.custom_domain or '' }}" placeholder="farm.696752.xyz" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-brand-500 outline-none">
+                        <input name="custom_domain" value="{{ settings.custom_domain or '' }}" placeholder="farm.696752.xyz" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-brand-500 outline-none mask-privacy">
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -397,6 +441,33 @@
     </footer>
 
     <script>
+        // Переключение приватного режима (Стример)
+        function togglePrivacyMode() {
+            const isPrivacy = document.body.classList.toggle('privacy-mode');
+            localStorage.setItem('farm_privacy_mode', isPrivacy ? '1' : '0');
+            updatePrivacyButton(isPrivacy);
+        }
+
+        function updatePrivacyButton(isPrivacy) {
+            const icon = document.getElementById('privacy-icon');
+            const text = document.getElementById('privacy-text');
+            const btn = document.getElementById('privacy-btn');
+            if (isPrivacy) {
+                icon.innerText = '🔒';
+                text.innerText = 'Данные скрыты';
+                btn.classList.add('border-brand-500/50', 'text-brand-400');
+            } else {
+                icon.innerText = '👁️';
+                text.innerText = 'Скрыть данные';
+                btn.classList.remove('border-brand-500/50', 'text-brand-400');
+            }
+        }
+
+        if (localStorage.getItem('farm_privacy_mode') === '1') {
+            document.body.classList.add('privacy-mode');
+            updatePrivacyButton(true);
+        }
+
         function switchTab(tab) {
             ['main', 'trash', 'settings'].forEach(t => {
                 const el = document.getElementById('tab-' + t);
