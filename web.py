@@ -696,7 +696,9 @@ def check_balance_all_route():
 # --- Авто-вывод баланса на сайт ---
 async def _withdraw_acc(acc, target_bot, site_login):
     if not site_login:
-        return
+        print("[!] Логин для вывода не указан", flush=True)
+        return False, "Логин не указан"
+
     s_name = acc["session"]
     bind_ip = acc.get("bind_ip", "")
     kwargs = {
@@ -713,38 +715,105 @@ async def _withdraw_acc(acc, target_bot, site_login):
     try:
         await client.connect()
         if not await client.is_user_authorized():
-            return
-        
-        peer = await client.get_input_entity(target_bot)
-        await client.send_message(peer, "/balance")
-        await asyncio.sleep(1.2)
+            return False, "Не авторизован"
 
-        msgs = await client.get_messages(peer, limit=2)
-        target_msg = None
-        for m in msgs:
-            if not m.out and m.reply_markup:
-                target_msg = m
+        peer = await client.get_input_entity(target_bot)
+
+        # 1. Запрашиваем баланс
+        cmd = await client.send_message(peer, "/balance")
+
+        # Ждем сообщение с кнопкой переноса
+        balance_msg = None
+        for _ in range(15):
+            await asyncio.sleep(0.5)
+            msgs = await client.get_messages(peer, limit=3)
+            for m in msgs:
+                if m.id >= cmd.id and not m.out and m.buttons:
+                    for row in m.buttons:
+                        for btn in row:
+                            if "перенести" in btn.text.lower():
+                                balance_msg = m
+                                break
+            if balance_msg:
                 break
 
-        if target_msg:
-            await target_msg.click(text=re.compile(r"перенести", re.IGNORECASE))
-            await asyncio.sleep(1.2)
+        if not balance_msg:
+            print(f"[{s_name}] Кнопка 'Перенести баланс' не найдена", flush=True)
+            return False, "Нет кнопки переноса"
 
-            await client.send_message(peer, site_login)
-            await asyncio.sleep(1.2)
+        # Проверяем, есть ли что выводить
+        txt = balance_msg.text or ""
+        match_bal = re.search(r"баланс[:\s]+([\d\.,]+)", txt, re.IGNORECASE)
+        if match_bal:
+            current_bal = float(match_bal.group(1).replace(",", "."))
+            if current_bal <= 0:
+                print(f"[{s_name}] Баланс 0.00, пропуск", flush=True)
+                return True, "Баланс 0"
 
-            confirm_msgs = await client.get_messages(peer, limit=2)
-            for cm in confirm_msgs:
-                if not cm.out and cm.reply_markup:
-                    try:
-                        await cm.click(text=re.compile(r"подтвер|да", re.IGNORECASE))
-                    except Exception:
-                        await cm.click(0)
+        # 2. Нажимаем кнопку "Перенести баланс"
+        clicked_transfer = False
+        for row_idx, row in enumerate(balance_msg.buttons):
+            for col_idx, btn in enumerate(row):
+                if "перенести" in btn.text.lower():
+                    await balance_msg.click(row_idx, col_idx)
+                    clicked_transfer = True
                     break
-            
-            print(f"[✓] Баланс аккаунта {s_name} перенесен на сайт под логином {site_login}")
+            if clicked_transfer:
+                break
+
+        print(f"[{s_name}] Нажата кнопка 'Перенести баланс'. Ожидаем форму ввода...", flush=True)
+
+        # 3. Ждем сообщение "Введите ID пользователя для переноса баланса:"
+        prompt_ready = False
+        for _ in range(15):
+            await asyncio.sleep(0.5)
+            msgs = await client.get_messages(peer, limit=2)
+            for m in msgs:
+                if not m.out and ("введите id" in (m.text or "").lower() or "перенос баланса" in (m.text or "").lower()):
+                    prompt_ready = True
+                    break
+            if prompt_ready:
+                break
+
+        # 4. Отправляем логин на сайт
+        sent_login = await client.send_message(peer, site_login)
+        print(f"[{s_name}] Отправлен логин '{site_login}'. Ожидаем кнопку подтверждения...", flush=True)
+
+        # 5. Ждем сообщение с кнопкой "Подтвердить перенос"
+        confirm_msg = None
+        for _ in range(15):
+            await asyncio.sleep(0.5)
+            msgs = await client.get_messages(peer, limit=3)
+            for m in msgs:
+                if m.id > sent_login.id and not m.out and m.buttons:
+                    for row in m.buttons:
+                        for btn in row:
+                            if "подтвердить" in btn.text.lower():
+                                confirm_msg = m
+                                break
+                if confirm_msg:
+                    break
+            if confirm_msg:
+                break
+
+        if not confirm_msg:
+            print(f"[{s_name}] Сообщение с подтверждением не появилось", flush=True)
+            return False, "Нет подтверждения"
+
+        # 6. Нажимаем кнопку "Подтвердить перенос"
+        for row_idx, row in enumerate(confirm_msg.buttons):
+            for col_idx, btn in enumerate(row):
+                if "подтвердить" in btn.text.lower():
+                    await confirm_msg.click(row_idx, col_idx)
+                    break
+
+        print(f"[✓] [{s_name}] Перенос успешно подтвержден!", flush=True)
+        await asyncio.sleep(1.0)
+        return True, "Успешно"
+
     except Exception as e:
-        print(f"[!] Ошибка вывода с {s_name}: {e}")
+        print(f"[!] Ошибка вывода на {s_name}: {e}", flush=True)
+        return False, str(e)
     finally:
         try: await client.disconnect()
         except Exception: pass
