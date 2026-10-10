@@ -108,16 +108,17 @@
             </div>
 
             <div class="lg:col-span-2 flex flex-col gap-6">
-                <!-- Карточка Основного IP -->
+                <!-- Карточки всех IP адресов -->
+                {% for group in ip_groups %}
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
                     <div class="flex justify-between items-center mb-4">
                         <div class="flex items-center gap-2">
-                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                            <span class="text-sm font-semibold tracking-wide uppercase">Основной IP: <span class="text-amber-400 font-mono">{{ primary_ip }}</span></span>
+                            <span class="w-2.5 h-2.5 rounded-full {% if group.color == 'amber' %}bg-amber-400{% else %}bg-blue-400{% endif %}"></span>
+                            <span class="text-sm font-semibold tracking-wide uppercase">{{ group.title }}</span>
                         </div>
-                        <span class="text-xs bg-slate-800 px-2.5 py-1 rounded-md text-slate-400">Ботов: {{ primary_accs|length }}</span>
+                        <span class="text-xs bg-slate-800 px-2.5 py-1 rounded-md text-slate-400">Ботов: {{ group.accounts|length }}</span>
                     </div>
-                    {% if primary_accs %}
+                    {% if group.accounts %}
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-xs">
                                 <thead>
@@ -128,7 +129,7 @@
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-800/60">
-                                    {% for acc in primary_accs %}
+                                    {% for acc in group.accounts %}
                                     <tr class="hover:bg-slate-800/30">
                                         <td class="py-2.5 font-medium text-slate-200">{{ acc.session }}</td>
                                         <td class="py-2.5 font-mono text-sky-400">{{ acc.phone or '-' }}</td>
@@ -147,48 +148,7 @@
                         <div class="text-center py-6 text-xs text-slate-400">Нет аккаунтов на этом адресе</div>
                     {% endif %}
                 </div>
-
-                <!-- Карточка Дополнительного IP -->
-                {% if secondary_ip %}
-                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
-                    <div class="flex justify-between items-center mb-4">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
-                            <span class="text-sm font-semibold tracking-wide uppercase">Дополнительный IP: <span class="text-blue-400 font-mono">{{ secondary_ip }}</span></span>
-                        </div>
-                        <span class="text-xs bg-slate-800 px-2.5 py-1 rounded-md text-slate-400">Ботов: {{ secondary_accs|length }}</span>
-                    </div>
-                    {% if secondary_accs %}
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left text-xs">
-                                <thead>
-                                    <tr class="text-slate-400 border-b border-slate-800">
-                                        <th class="pb-2">Сессия</th>
-                                        <th class="pb-2">Телефон</th>
-                                        <th class="pb-2 text-right">Действие</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-800/60">
-                                    {% for acc in secondary_accs %}
-                                    <tr class="hover:bg-slate-800/30">
-                                        <td class="py-2.5 font-medium text-slate-200">{{ acc.session }}</td>
-                                        <td class="py-2.5 font-mono text-sky-400">{{ acc.phone or '-' }}</td>
-                                        <td class="py-2.5 text-right">
-                                            <form action="/delete" method="post" onsubmit="return confirm('Переместить аккаунт в корзину?')">
-                                                <input type="hidden" name="session_name" value="{{ acc.session }}">
-                                                <button type="submit" class="text-rose-400 hover:text-rose-300 font-medium">В корзину</button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <div class="text-center py-6 text-xs text-slate-400">Нет аккаунтов на этом адресе</div>
-                    {% endif %}
-                </div>
-                {% endif %}
+                {% endfor %}
 
                 <!-- Консоль логов -->
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
