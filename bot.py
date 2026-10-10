@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import random
 import hashlib
 import shutil
 from datetime import datetime
@@ -24,7 +25,8 @@ processed_vouchers = set()
 def load_settings():
     default_settings = {
         "source_channel": "vaycher_virtnumber",
-        "target_bot": "Virtnumber_buy_bot"
+        "target_bot": "Virtnumber_buy_bot",
+        "enable_smart_jitter": False
     }
     for p in [os.path.join(DATA_DIR, "config.json"), os.path.join(BASE_DIR, "config.json")]:
         if os.path.exists(p) and os.path.getsize(p) > 5:
@@ -134,13 +136,16 @@ async def init_client_target(client: TelegramClient, target_bot: str):
         print(f"[!] Не удалось закэшировать бота: {e}", flush=True)
         return None
 
-async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
+async def send_to_bot(client: TelegramClient, target_bot: str, code: str, delay_ms: float = 0):
+    if delay_ms > 0:
+        await asyncio.sleep(delay_ms / 1000.0)
+
     sess_name = client_sessions.get(client, "unknown")
     try:
         peer = target_peers.get(client, target_bot)
         await client.send_message(peer, code)
         me = await client.get_me()
-        print(f"[OK] {me.first_name} (@{me.username}) отправил код: {code}", flush=True)
+        print(f"[OK] {me.first_name} (@{me.username}) отправил код: {code} (задержка: {int(delay_ms)}мс)", flush=True)
     except Exception as e:
         err_msg = str(e)
         print(f"[x] Ошибка отправки на {sess_name}: {err_msg}", flush=True)
@@ -224,13 +229,14 @@ async def main():
     settings = load_settings()
     source_channel = settings.get("source_channel", "vaycher_virtnumber")
     target_bot = settings.get("target_bot", "Virtnumber_buy_bot")
+    enable_jitter = settings.get("enable_smart_jitter", False)
 
     accounts = load_accounts()
     if not accounts:
         print("[!] Список аккаунтов пуст.", flush=True)
         return
 
-    print("[*] Подключение активных аккаунтов...", flush=True)
+    print("[*] Подключение активных аккаунтов (без отправки /start)...", flush=True)
 
     for acc in accounts:
         session_name = str(acc["session"]).strip()
@@ -290,6 +296,7 @@ async def main():
     print(f"\n[✓] Итого активных аккаунтов: {len(clients)}", flush=True)
     print(f"[✓] Канал перехвата: @{source_channel}", flush=True)
     print(f"[✓] Целевой бот: @{target_bot}", flush=True)
+    print(f"[✓] Smart Jitter: {'ВКЛЮЧЕН' if enable_jitter else 'ВЫКЛЮЧЕН'}", flush=True)
 
     if not clients:
         print("[!] Нет доступных аккаунтов для снайпинга.", flush=True)
@@ -301,7 +308,8 @@ async def main():
 
     listener = clients[0]
 
-    async def handle_message_event(event):
+    @listener.on(events.NewMessage(chats=source_channel))
+    async def handler(event):
         msg = event.message
         voucher_code = None
         raw_text = msg.text or ""
@@ -338,15 +346,15 @@ async def main():
                 processed_vouchers.clear()
 
             print(f"\n[!] ПОЙМАН ВАУЧЕР: {voucher_code}. Залп со всех {len(clients)} аккаунтов...", flush=True)
-            await asyncio.gather(*(send_to_bot(client, target_bot, voucher_code) for client in list(clients)))
+            
+            tasks = []
+            for idx, client in enumerate(list(clients)):
+                delay = 0
+                if enable_jitter and idx > 0:
+                    delay = random.uniform(20.0, 80.0) * idx
+                tasks.append(send_to_bot(client, target_bot, voucher_code, delay))
 
-    @listener.on(events.NewMessage(chats=source_channel))
-    async def new_msg_handler(event):
-        await handle_message_event(event)
-
-    @listener.on(events.MessageEdited(chats=source_channel))
-    async def edit_msg_handler(event):
-        await handle_message_event(event)
+            await asyncio.gather(*tasks)
 
     asyncio.create_task(keep_alive())
 
