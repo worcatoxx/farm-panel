@@ -68,7 +68,9 @@ def load_settings():
         "admin_pass": "superpass123",
         "source_channel": "vaycher_virtnumber",
         "target_bot": "Virtnumber_buy_bot",
-        "custom_domain": "farm.696752.xyz",
+        "custom_domain": "",
+        "site_withdraw_login": "",
+        "enable_smart_jitter": False,
         "nodes": []
     }
     target_f = SETTINGS_FILE if (os.path.exists(SETTINGS_FILE) and os.path.getsize(SETTINGS_FILE) > 10) else BACKUP_SETTINGS_FILE
@@ -268,6 +270,13 @@ def index():
     trash_accs = load_trash()
 
     ip_groups = []
+    total_balance = 0.0
+    for a in accounts:
+        try:
+            total_balance += float(str(a.get("balance", "0")).replace(",", "."))
+        except ValueError:
+            pass
+
     for idx, ip in enumerate(server_ips):
         if idx == 0:
             accs = [a for a in accounts if not a.get("bind_ip") or a.get("bind_ip") == ip]
@@ -299,7 +308,9 @@ def index():
         available_ips=available_ips,
         settings=settings,
         linked_nodes=nodes,
-        trash_accs=trash_accs
+        trash_accs=trash_accs,
+        total_balance=f"{total_balance:.2f}",
+        total_accounts_count=len(accounts)
     )
 
 # --- Логика Telegram в едином Loop ---
@@ -380,7 +391,7 @@ def start_phone_login():
             "phone_code_hash": code_hash
         }
     except FloodWaitError as e:
-        return f"<h3>Telegram временно ограничил отправку кодов (FloodWait). Подождите {e.seconds} секунд.</h3><br><a href='/'>Назад</a>", 429
+        return f"<h3>Telegram ограничил отправку кодов (FloodWait). Подождите {e.seconds} сек.</h3><br><a href='/'>Назад</a>", 429
     except (PhoneNumberInvalidError, PhoneNumberBannedError) as e:
         return f"<h3>Номер заблокирован или неверен: {e}</h3><br><a href='/'>Назад</a>", 400
     except Exception as e:
@@ -461,7 +472,7 @@ def finish_phone_login():
     save_accounts(accs)
     return redirect("/")
 
-# --- Проверка баланса в боте (/balance) ---
+# --- Баланс (/balance) ---
 async def _fetch_acc_balance(acc, target_bot):
     s_name = acc["session"]
     bind_ip = acc.get("bind_ip", "")
@@ -485,7 +496,6 @@ async def _fetch_acc_balance(acc, target_bot):
         peer = await client.get_input_entity(target_bot)
         await client.send_message(peer, "/balance")
         
-        # Ждем ответ от бота до 6 секунд
         for _ in range(12):
             await asyncio.sleep(0.5)
             msgs = await client.get_messages(peer, limit=2)
@@ -493,7 +503,6 @@ async def _fetch_acc_balance(acc, target_bot):
                 if m.out:
                     continue
                 txt = m.text or ""
-                # Регулярка для "Ваш баланс: 0.00"
                 match = re.search(r"баланс[:\s]+([\d\.,]+)", txt, re.IGNORECASE)
                 if match:
                     balance_val = match.group(1).replace(",", ".")
@@ -536,7 +545,95 @@ def check_balance_all_route():
         threading.Thread(target=send_remote_request, args=(node, "/accounts/check-balance"), daemon=True).start()
     return redirect("/")
 
-# --- Ручная проверка жизнеспособности аккаунтов (/start) ---
+# --- Авто-вывод баланса на сайт ---
+async def _withdraw_acc(acc, target_bot, site_login):
+    if not site_login:
+        return
+    s_name = acc["session"]
+    bind_ip = acc.get("bind_ip", "")
+    kwargs = {
+        "api_id": acc.get("api_id", 2040),
+        "api_hash": acc.get("api_hash", "b18441a1ff607e10a989891a5462e627"),
+        "loop": tg_loop
+    }
+    if bind_ip:
+        if ":" in bind_ip:
+            kwargs["use_ipv6"] = True
+        kwargs["local_addr"] = (bind_ip, 0)
+
+    client = TelegramClient(os.path.join(BASE_DIR, s_name), **kwargs)
+    try:
+        await client.connect()
+        if not await client.is_user_authorized():
+            return
+        
+        peer = await client.get_input_entity(target_bot)
+        await client.send_message(peer, "/balance")
+        await asyncio.sleep(1.2)
+
+        msgs = await client.get_messages(peer, limit=2)
+        target_msg = None
+        for m in msgs:
+            if not m.out and m.reply_markup:
+                target_msg = m
+                break
+
+        if target_msg:
+            # 1. Нажимаем кнопку "Перенести баланс"
+            await target_msg.click(text=re.compile(r"перенести", re.IGNORECASE))
+            await asyncio.sleep(1.2)
+
+            # 2. Отправляем логин сайта в чат
+            await client.send_message(peer, site_login)
+            await asyncio.sleep(1.2)
+
+            # 3. Нажимаем кнопку подтверждения
+            confirm_msgs = await client.get_messages(peer, limit=2)
+            for cm in confirm_msgs:
+                if not cm.out and cm.reply_markup:
+                    try:
+                        await cm.click(text=re.compile(r"подтвер|да", re.IGNORECASE))
+                    except Exception:
+                        await cm.click(0)
+                    break
+            
+            print(f"[✓] Баланс аккаунта {s_name} перенесен на сайт под логином {site_login}")
+    except Exception as e:
+        print(f"[!] Ошибка вывода с {s_name}: {e}")
+    finally:
+        try: await client.disconnect()
+        except Exception: pass
+
+async def _run_all_withdrawals():
+    settings = load_settings()
+    target_bot = settings.get("target_bot", "Virtnumber_buy_bot")
+    site_login = settings.get("site_withdraw_login", "").strip()
+    if not site_login:
+        print("[!] Логин для вывода на сайт не настроен!")
+        return
+
+    accs = load_accounts()
+    for a in accs:
+        await _withdraw_acc(a, target_bot, site_login)
+        await asyncio.sleep(0.5)
+    
+    # После вывода обновляем балансы
+    await _check_all_balances()
+
+@app.route("/accounts/withdraw", methods=["POST"])
+def withdraw_route():
+    run_tg(_run_all_withdrawals())
+    return redirect("/")
+
+@app.route("/accounts/withdraw-all", methods=["POST"])
+def withdraw_all_route():
+    run_tg(_run_all_withdrawals())
+    settings = load_settings()
+    for node in settings.get("nodes", []):
+        threading.Thread(target=send_remote_request, args=(node, "/accounts/withdraw"), daemon=True).start()
+    return redirect("/")
+
+# --- Проверка аккаунтов (/start) ---
 async def _health_check_acc(acc, target_bot):
     s_name = acc["session"]
     bind_ip = acc.get("bind_ip", "")
@@ -605,7 +702,6 @@ def check_health_all_route():
         threading.Thread(target=send_remote_request, args=(node, "/accounts/check-health"), daemon=True).start()
     return redirect("/")
 
-# --- Ноды и службы ---
 @app.route("/node/add", methods=["POST"])
 def add_node():
     settings = load_settings()
@@ -647,6 +743,8 @@ def save_settings_route():
     settings["source_channel"] = request.form.get("source_channel", "").strip()
     settings["target_bot"] = request.form.get("target_bot", "").strip()
     settings["custom_domain"] = request.form.get("custom_domain", "").strip()
+    settings["site_withdraw_login"] = request.form.get("site_withdraw_login", "").strip()
+    settings["enable_smart_jitter"] = bool(request.form.get("enable_smart_jitter"))
     save_settings(settings)
     return redirect("/?tab=settings")
 
