@@ -162,8 +162,6 @@ def move_acc_to_trash(session_name: str, reason: str = "Удален вручн�
 
 def get_server_ips():
     primary_ip = None
-    secondary_ip = None
-
     try:
         req = urllib.request.Request("https://api.ipify.org", headers={"User-Agent": "curl/7.68.0"})
         with urllib.request.urlopen(req, timeout=2.5) as r:
@@ -171,27 +169,28 @@ def get_server_ips():
     except Exception:
         pass
 
-    local_ips = []
+    all_ips = []
     try:
         out = subprocess.check_output(["ip", "-4", "addr", "show", "scope", "global"], text=True)
         for line in out.splitlines():
             line = line.strip()
             if line.startswith("inet "):
                 ip = line.split()[1].split("/")[0]
-                if not ip.startswith(("172.17.", "172.18.", "172.19.", "127.", "169.254.")):
-                    local_ips.append(ip)
+                if not ip.startswith(("172.17.", "172.18.", "172.19.", "127.", "169.254.", "10.", "192.168.")):
+                    if ip not in all_ips:
+                        all_ips.append(ip)
     except Exception:
         pass
 
-    if not primary_ip:
-        primary_ip = local_ips[0] if local_ips else "127.0.0.1"
+    if not primary_ip and all_ips:
+        primary_ip = all_ips[0]
+    elif not primary_ip:
+        primary_ip = "127.0.0.1"
 
-    for ip in local_ips:
-        if ip != primary_ip and not ip.startswith("10.") and not ip.startswith("192.168."):
-            secondary_ip = ip
-            break
-
-    return primary_ip, secondary_ip
+    if primary_ip in all_ips:
+        all_ips.remove(primary_ip)
+    all_ips.insert(0, primary_ip)
+    return all_ips
 
 def get_service_status():
     try:
@@ -272,16 +271,31 @@ def logout():
 @app.route("/")
 def index():
     settings = load_settings()
-    primary_ip, secondary_ip = get_server_ips()
+    server_ips = get_server_ips()
+    primary_ip = server_ips[0] if server_ips else "127.0.0.1"
     accounts = load_accounts()
     trash_accs = load_trash()
 
-    primary_accs = [a for a in accounts if not a.get("bind_ip") or a.get("bind_ip") == primary_ip]
-    secondary_accs = [a for a in accounts if a.get("bind_ip") == secondary_ip] if secondary_ip else []
+    ip_groups = []
+    for idx, ip in enumerate(server_ips):
+        if idx == 0:
+            accs = [a for a in accounts if not a.get("bind_ip") or a.get("bind_ip") == ip]
+            title = f"ОСНОВНОЙ IP: {ip}"
+            color = "amber"
+        else:
+            accs = [a for a in accounts if a.get("bind_ip") == ip]
+            title = f"ДОПОЛНИТЕЛЬНЫЙ IP: {ip}"
+            color = "blue"
+        ip_groups.append({
+            "ip": ip,
+            "title": title,
+            "color": color,
+            "accounts": accs
+        })
 
     available_ips = [{"val": "", "label": f"Основной IP ({primary_ip})"}]
-    if secondary_ip:
-        available_ips.append({"val": secondary_ip, "label": f"Дополнительный IP ({secondary_ip})"})
+    for ip in server_ips[1:]:
+        available_ips.append({"val": ip, "label": f"Дополнительный IP ({ip})"})
 
     nodes = settings.get("nodes", [])
     current_display_host = settings.get("custom_domain") if settings.get("custom_domain") else primary_ip
@@ -289,11 +303,8 @@ def index():
     return render_template(
         "index.html",
         service_status=get_service_status(),
-        primary_ip=primary_ip,
-        secondary_ip=secondary_ip,
         current_display_host=current_display_host,
-        primary_accs=primary_accs,
-        secondary_accs=secondary_accs,
+        ip_groups=ip_groups,
         available_ips=available_ips,
         settings=settings,
         linked_nodes=nodes,
