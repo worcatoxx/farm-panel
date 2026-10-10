@@ -3,14 +3,18 @@ import json
 import subprocess
 import threading
 import urllib.request
+import urllib.error
 import base64
 import shutil
 import asyncio
 import re
+import time
+import random
 from datetime import datetime
-from flask import Flask, render_template, render_template_string, request, redirect, session, jsonify
+from flask import Flask, render_template, render_template_string, request, redirect, session, jsonify, Response
 from telethon import TelegramClient
 from telethon.tl.types.auth import SentCodeTypeApp, SentCodeTypeSms, SentCodeTypeCall, SentCodeTypeFlashCall
+from telethon.tl.functions import PingRequest
 from telethon.errors import (
     SessionPasswordNeededError,
     PhoneCodeInvalidError,
@@ -220,6 +224,18 @@ def send_remote_request(node, endpoint):
     except Exception:
         pass
 
+def fetch_remote_node_stats(node):
+    url = f"{node['url'].rstrip('/')}/api/node-stats"
+    req = urllib.request.Request(url, headers={"User-Agent": "FarmBot-Master"})
+    if node.get("user") and node.get("pass"):
+        auth = base64.b64encode(f"{node['user']}:{node['pass']}".encode()).decode()
+        req.add_header("Authorization", f"Basic {auth}")
+    try:
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return {"balance": 0.0, "accounts_count": 0, "online": False}
+
 @app.before_request
 def require_login():
     settings = load_settings()
@@ -233,7 +249,7 @@ def require_login():
         except Exception:
             pass
 
-    allowed = ["/login", "/static"]
+    allowed = ["/login", "/static", "/api/node-stats"]
     if any(request.path.startswith(p) for p in allowed):
         return
     if not session.get("logged_in"):
@@ -261,6 +277,64 @@ def logout():
     session.clear()
     return redirect("/login")
 
+# --- API отдачи статистики для Master панели ---
+@app.route("/api/node-stats")
+def api_node_stats():
+    accounts = load_accounts()
+    b_sum = 0.0
+    for a in accounts:
+        try:
+            b_sum += float(str(a.get("balance", "0")).replace(",", "."))
+        except ValueError:
+            pass
+    return jsonify({
+        "balance": b_sum,
+        "accounts_count": len(accounts),
+        "online": True
+    })
+
+# --- Мастер-Прокси для бесшовного просмотра нод во фрейме ---
+@app.route("/proxy/<int:node_idx>/", defaults={"subpath": ""}, methods=["GET", "POST"])
+@app.route("/proxy/<int:node_idx>/<path:subpath>", methods=["GET", "POST"])
+def master_proxy_node(node_idx, subpath):
+    settings = load_settings()
+    nodes = settings.get("nodes", [])
+    if node_idx < 0 or node_idx >= len(nodes):
+        return "Нода не найдена", 404
+
+    node = nodes[node_idx]
+    target_url = f"{node['url'].rstrip('/')}/{subpath}"
+    if request.query_string:
+        target_url += f"?{request.query_string.decode('utf-8')}"
+
+    auth_str = base64.b64encode(f"{node.get('user', 'admin')}:{node.get('pass', '')}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {auth_str}",
+        "User-Agent": request.headers.get("User-Agent", "Mozilla/5.0")
+    }
+
+    data = request.get_data() if request.method == "POST" else None
+    req = urllib.request.Request(target_url, data=data, headers=headers, method=request.method)
+
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            content = resp.read()
+            content_type = resp.headers.get("Content-Type", "text/html")
+            
+            # Переписываем пути для формы и ссылок, чтобы оставаться внутри прокси
+            if "text/html" in content_type:
+                html_text = content.decode("utf-8", errors="ignore")
+                base_tag = f'<base href="/proxy/{node_idx}/">'
+                if "<head>" in html_text:
+                    html_text = html_text.replace("<head>", f"<head>{base_tag}", 1)
+                content = html_text.encode("utf-8")
+
+            return Response(content, status=resp.status, content_type=content_type)
+    except urllib.error.HTTPError as e:
+        return Response(e.read(), status=e.code, content_type=e.headers.get("Content-Type", "text/plain"))
+    except Exception as e:
+        return f"<div style='color:white;background:#09090b;padding:20px;font-family:sans-serif;'><h3>[!] Ошибка соединения с нодой:</h3><p>{e}</p></div>", 502
+
 @app.route("/")
 def index():
     settings = load_settings()
@@ -269,14 +343,36 @@ def index():
     accounts = load_accounts()
     trash_accs = load_trash()
 
-    ip_groups = []
-    total_balance = 0.0
+    local_balance = 0.0
     for a in accounts:
         try:
-            total_balance += float(str(a.get("balance", "0")).replace(",", "."))
+            local_balance += float(str(a.get("balance", "0")).replace(",", "."))
         except ValueError:
             pass
 
+    nodes = settings.get("nodes", [])
+    nodes_stats = []
+    network_nodes_balance = 0.0
+    network_nodes_accs = 0
+
+    # Сбор данных с других нод для кассы всей сети
+    for n in nodes:
+        st = fetch_remote_node_stats(n)
+        b_val = float(st.get("balance", 0.0))
+        network_nodes_balance += b_val
+        network_nodes_accs += int(st.get("accounts_count", 0))
+        nodes_stats.append({
+            "name": n["name"],
+            "url": n["url"],
+            "balance": f"{b_val:.2f}",
+            "accounts_count": st.get("accounts_count", 0),
+            "online": st.get("online", False)
+        })
+
+    total_farm_balance = local_balance + network_nodes_balance
+    total_farm_accounts = len(accounts) + network_nodes_accs
+
+    ip_groups = []
     for idx, ip in enumerate(server_ips):
         if idx == 0:
             accs = [a for a in accounts if not a.get("bind_ip") or a.get("bind_ip") == ip]
@@ -297,7 +393,6 @@ def index():
     for ip in server_ips[1:]:
         available_ips.append({"val": ip, "label": f"Дополнительный IP ({ip})"})
 
-    nodes = settings.get("nodes", [])
     current_display_host = settings.get("custom_domain") if settings.get("custom_domain") else primary_ip
 
     return render_template(
@@ -308,12 +403,64 @@ def index():
         available_ips=available_ips,
         settings=settings,
         linked_nodes=nodes,
+        nodes_stats=nodes_stats,
         trash_accs=trash_accs,
-        total_balance=f"{total_balance:.2f}",
-        total_accounts_count=len(accounts)
+        local_balance=f"{local_balance:.2f}",
+        total_farm_balance=f"{total_farm_balance:.2f}",
+        total_accounts_count=len(accounts),
+        total_farm_accounts=total_farm_accounts
     )
 
-# --- Логика Telegram в едином Loop ---
+# --- Speed Benchmark (Замер пинга до Telegram DC) ---
+async def _measure_acc_ping(acc):
+    s_name = acc["session"]
+    bind_ip = acc.get("bind_ip", "")
+    kwargs = {
+        "api_id": acc.get("api_id", 2040),
+        "api_hash": acc.get("api_hash", "b18441a1ff607e10a989891a5462e627"),
+        "loop": tg_loop,
+        "timeout": 5
+    }
+    if bind_ip:
+        if ":" in bind_ip:
+            kwargs["use_ipv6"] = True
+        kwargs["local_addr"] = (bind_ip, 0)
+
+    client = TelegramClient(os.path.join(BASE_DIR, s_name), **kwargs)
+    ping_res = acc.get("ping", "-")
+    try:
+        t0 = time.time()
+        await client.connect()
+        if await client.is_user_authorized():
+            await client(PingRequest(ping_id=random.randint(1000, 999999)))
+            elapsed = (time.time() - t0) * 1000
+            ping_res = f"{int(elapsed)} ms"
+    except Exception as e:
+        ping_res = "err"
+    finally:
+        try: await client.disconnect()
+        except Exception: pass
+        
+    return s_name, ping_res
+
+async def _benchmark_all():
+    accs = load_accounts()
+    tasks = [_measure_acc_ping(a) for a in accs]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    accs_map = {a["session"]: a for a in accs}
+    for res in results:
+        if isinstance(res, tuple):
+            s_name, p_val = res
+            if s_name in accs_map:
+                accs_map[s_name]["ping"] = p_val
+    save_accounts(list(accs_map.values()))
+
+@app.route("/accounts/benchmark", methods=["POST"])
+def benchmark_route():
+    run_tg(_benchmark_all())
+    return redirect("/")
+
+# --- Логика Telegram Login ---
 async def _do_start(session_path, api_id, api_hash, phone, bind_ip):
     kwargs = {
         "api_id": api_id,
@@ -467,7 +614,8 @@ def finish_phone_login():
         "api_id": data["api_id"],
         "api_hash": data["api_hash"],
         "bind_ip": data["bind_ip"],
-        "balance": "0.00"
+        "balance": "0.00",
+        "ping": "-"
     })
     save_accounts(accs)
     return redirect("/")
@@ -579,15 +727,12 @@ async def _withdraw_acc(acc, target_bot, site_login):
                 break
 
         if target_msg:
-            # 1. Нажимаем кнопку "Перенести баланс"
             await target_msg.click(text=re.compile(r"перенести", re.IGNORECASE))
             await asyncio.sleep(1.2)
 
-            # 2. Отправляем логин сайта в чат
             await client.send_message(peer, site_login)
             await asyncio.sleep(1.2)
 
-            # 3. Нажимаем кнопку подтверждения
             confirm_msgs = await client.get_messages(peer, limit=2)
             for cm in confirm_msgs:
                 if not cm.out and cm.reply_markup:
@@ -617,7 +762,6 @@ async def _run_all_withdrawals():
         await _withdraw_acc(a, target_bot, site_login)
         await asyncio.sleep(0.5)
     
-    # После вывода обновляем балансы
     await _check_all_balances()
 
 @app.route("/accounts/withdraw", methods=["POST"])
