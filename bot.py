@@ -7,74 +7,74 @@ import shutil
 from datetime import datetime
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageEntityCode, MessageEntityPre
-from telethon.errors import (
-    UserDeactivatedError,
-    UserDeactivatedBanError,
-    AuthKeyUnregisteredError,
-    SessionRevokedError,
-    SessionExpiredError,
-    UserRestrictedError,
-    ChatWriteForbiddenError
-)
 
-# ВСЕ данные живут строго в защищенной папке
+BASE_DIR = "/root/farm_panel"
 DATA_DIR = "/root/farm_data"
+os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
-CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
-ACCOUNTS_FILE = os.path.join(DATA_DIR, "accounts.json")
-TRASH_FILE = os.path.join(DATA_DIR, "trash.json")
 TRASH_DIR = os.path.join(DATA_DIR, "trash")
 os.makedirs(TRASH_DIR, exist_ok=True)
 
 clients = []
 client_sessions = {}
 target_peers = {}
+processed_vouchers = set()
 
 def load_settings():
     default_settings = {
         "source_channel": "vaycher_virtnumber",
         "target_bot": "Virtnumber_buy_bot"
     }
-    if not os.path.exists(CONFIG_FILE):
-        return default_settings
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return default_settings
+    for p in [os.path.join(DATA_DIR, "config.json"), os.path.join(BASE_DIR, "config.json")]:
+        if os.path.exists(p) and os.path.getsize(p) > 5:
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    for k, v in default_settings.items():
+                        data.setdefault(k, v)
+                    return data
+            except Exception:
+                pass
+    return default_settings
 
 def load_accounts():
-    if not os.path.exists(ACCOUNTS_FILE):
-        return []
-    try:
-        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    for p in [os.path.join(DATA_DIR, "accounts.json"), os.path.join(BASE_DIR, "accounts.json")]:
+        if os.path.exists(p) and os.path.getsize(p) > 2:
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    accs = json.load(f)
+                    if accs:
+                        return accs
+            except Exception:
+                pass
+    return []
 
 def save_accounts(accounts):
-    try:
-        with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(accounts, f, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"[!] Ошибка сохранения accounts.json: {e}", flush=True)
+    for d in [DATA_DIR, BASE_DIR]:
+        try:
+            with open(os.path.join(d, "accounts.json"), "w", encoding="utf-8") as f:
+                json.dump(accounts, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"[!] Ошибка сохранения accounts.json: {e}", flush=True)
 
 def load_trash():
-    if not os.path.exists(TRASH_FILE):
-        return []
-    try:
-        with open(TRASH_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    for p in [os.path.join(DATA_DIR, "trash.json"), os.path.join(BASE_DIR, "trash.json")]:
+        if os.path.exists(p) and os.path.getsize(p) > 2:
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+    return []
 
 def save_trash(trash):
-    try:
-        with open(TRASH_FILE, "w", encoding="utf-8") as f:
-            json.dump(trash, f, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"[!] Ошибка сохранения trash.json: {e}", flush=True)
+    for d in [DATA_DIR, BASE_DIR]:
+        try:
+            with open(os.path.join(d, "trash.json"), "w", encoding="utf-8") as f:
+                json.dump(trash, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"[!] Ошибка сохранения trash.json: {e}", flush=True)
 
 def move_to_trash(session_name: str, reason: str = ""):
     try:
@@ -100,16 +100,17 @@ def move_to_trash(session_name: str, reason: str = ""):
         trash.append(target_acc)
         save_trash(trash)
 
-        for ext in [".session", ".session-journal"]:
-            src = os.path.join(DATA_DIR, f"{s_target}{ext}")
-            dst = os.path.join(TRASH_DIR, f"{s_target}{ext}")
-            if os.path.exists(src):
-                try:
-                    shutil.move(src, dst)
-                except Exception:
-                    pass
+        for base in [DATA_DIR, BASE_DIR]:
+            t_dir = os.path.join(base, "trash")
+            os.makedirs(t_dir, exist_ok=True)
+            for ext in [".session", ".session-journal"]:
+                src = os.path.join(base, f"{s_target}{ext}")
+                dst = os.path.join(t_dir, f"{s_target}{ext}")
+                if os.path.exists(src):
+                    try: shutil.move(src, dst)
+                    except Exception: pass
 
-        print(f"[🗑️ В КОРЗИНУ] Сессия {s_target} перемещена в корзину: {reason}", flush=True)
+        print(f"[🗑️ В КОРЗИНУ] Сессия {s_target} перемещена: {reason}", flush=True)
     except Exception as e:
         print(f"[!] Ошибка перемещения в корзину {session_name}: {e}", flush=True)
 
@@ -132,24 +133,6 @@ async def init_client_target(client: TelegramClient, target_bot: str):
     except Exception as e:
         print(f"[!] Не удалось закэшировать бота: {e}", flush=True)
         return None
-
-async def test_bot_start(client: TelegramClient, target_bot: str):
-    try:
-        peer = target_peers.get(client)
-        if not peer:
-            peer = await client.get_input_entity(target_bot)
-            target_peers[client] = peer
-        await client.send_message(peer, "/start")
-        return True, "OK"
-    except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError, SessionRevokedError, UserRestrictedError, ChatWriteForbiddenError) as e:
-        return False, f"Блокировка Telegram: {e}"
-    except Exception as e:
-        err_msg = str(e).lower()
-        if any(w in err_msg for w in ["frozen", "deactivated", "banned", "restricted", "forbidden"]):
-            return False, f"Заморожен: {e}"
-        # Любые сетевые сбои, FloodWait или недоступность бота НЕ удаляют сессию
-        print(f"[WARN] Временная задержка при отправке /start ({e}). Аккаунт остается в работе.", flush=True)
-        return True, "OK"
 
 async def send_to_bot(client: TelegramClient, target_bot: str, code: str):
     sess_name = client_sessions.get(client, "unknown")
@@ -183,10 +166,8 @@ async def keep_alive():
                     if c in clients:
                         clients.remove(c)
                     move_to_trash(sess_name, f"Отлетел в фоне: {err_msg}")
-                    try:
-                        await c.disconnect()
-                    except Exception:
-                        pass
+                    try: await c.disconnect()
+                    except Exception: pass
 
 def solve_math_equation(text: str) -> str | None:
     if not text:
@@ -249,18 +230,21 @@ async def main():
         print("[!] Список аккаунтов пуст.", flush=True)
         return
 
-    print(f"[*] Проверка аккаунтов через бота @{target_bot} (/start)...", flush=True)
+    print("[*] Подключение активных аккаунтов...", flush=True)
 
     for acc in accounts:
         session_name = str(acc["session"]).strip()
         session_path = os.path.join(DATA_DIR, session_name)
+        if not os.path.exists(f"{session_path}.session"):
+            session_path = os.path.join(BASE_DIR, session_name)
+
         bind_ip = acc.get("bind_ip")
         device_info = get_device_fingerprint(session_name)
 
         kwargs = {
             "session": session_path,
-            "api_id": acc["api_id"],
-            "api_hash": acc["api_hash"],
+            "api_id": acc.get("api_id", 2040),
+            "api_hash": acc.get("api_hash", "b18441a1ff607e10a989891a5462e627"),
             "device_model": device_info["device_model"],
             "system_version": device_info["system_version"],
             "app_version": device_info["app_version"],
@@ -291,22 +275,16 @@ async def main():
                 if not me or getattr(me, "deleted", False):
                     death_reason = "Аккаунт удален в Telegram"
                 else:
-                    can_start, start_err = await test_bot_start(c, target_bot)
-                    if not can_start:
-                        death_reason = f"Не удалось отправить /start в @{target_bot}: {start_err}"
-                    else:
-                        is_alive = True
-                        clients.append(c)
-                        client_sessions[c] = session_name
-                        print(f"[+] Сессия {session_name} онлайн: {me.first_name} ({acc.get('phone', '-')})", flush=True)
+                    is_alive = True
+                    clients.append(c)
+                    client_sessions[c] = session_name
+                    print(f"[+] Сессия {session_name} онлайн: {me.first_name} ({acc.get('phone', '-')})", flush=True)
         except Exception as e:
             death_reason = str(e)
 
         if not is_alive:
-            try:
-                await c.disconnect()
-            except Exception:
-                pass
+            try: await c.disconnect()
+            except Exception: pass
             move_to_trash(session_name, death_reason)
 
     print(f"\n[✓] Итого активных аккаунтов: {len(clients)}", flush=True)
@@ -323,8 +301,7 @@ async def main():
 
     listener = clients[0]
 
-    @listener.on(events.NewMessage(chats=source_channel))
-    async def handler(event):
+    async def handle_message_event(event):
         msg = event.message
         voucher_code = None
         raw_text = msg.text or ""
@@ -344,6 +321,9 @@ async def main():
                         break
 
         if voucher_code:
+            if voucher_code in processed_vouchers:
+                return
+
             if "*" in voucher_code:
                 digit = solve_math_equation(raw_text)
                 if digit is not None:
@@ -353,8 +333,20 @@ async def main():
                     print(f"[ERR] Не удалось решить уравнение для {voucher_code}. Пропуск.", flush=True)
                     return
 
+            processed_vouchers.add(voucher_code)
+            if len(processed_vouchers) > 200:
+                processed_vouchers.clear()
+
             print(f"\n[!] ПОЙМАН ВАУЧЕР: {voucher_code}. Залп со всех {len(clients)} аккаунтов...", flush=True)
             await asyncio.gather(*(send_to_bot(client, target_bot, voucher_code) for client in list(clients)))
+
+    @listener.on(events.NewMessage(chats=source_channel))
+    async def new_msg_handler(event):
+        await handle_message_event(event)
+
+    @listener.on(events.MessageEdited(chats=source_channel))
+    async def edit_msg_handler(event):
+        await handle_message_event(event)
 
     asyncio.create_task(keep_alive())
 
