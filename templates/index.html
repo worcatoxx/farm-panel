@@ -59,7 +59,8 @@
 <body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col antialiased selection:bg-brand-600 selection:text-white ambient-glow relative overflow-x-hidden">
 
     <header class="sticky top-0 z-40 w-full backdrop-blur-md bg-zinc-950/85 border-b border-zinc-800/80 transition-all">
-        <div class="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:min-h-[4rem] flex flex-wrap items-center justify-between gap-2.5">
+        <div class="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:min-h-[4rem] flex flex-wrap items-center justify-between gap-3">
+            
             <!-- Логотип и хост -->
             <div class="flex items-center justify-between w-full sm:w-auto">
                 <div class="flex items-center gap-2.5">
@@ -73,17 +74,17 @@
                                 {% if linked_nodes %}👑 MASTER{% else %}NODE{% endif %}
                             </span>
                         </div>
-                        <p class="text-[10px] sm:text-[11px] text-zinc-400 font-mono mask-privacy truncate max-w-[160px] sm:max-w-none">{{ current_display_host or '127.0.0.1' }}</p>
+                        <p class="text-[10px] sm:text-[11px] text-zinc-400 font-mono mask-privacy truncate max-w-[180px] sm:max-w-none">{{ current_display_host or '127.0.0.1' }}</p>
                     </div>
                 </div>
 
-                <!-- На мобилках показываем мини-кассу и выход справа в верхнем ряду -->
+                <!-- Мобильные быстрые иконки справа в шапке -->
                 <div class="flex sm:hidden items-center gap-1.5">
                     <div class="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-[11px] font-mono font-bold text-emerald-400">
                         {{ total_farm_balance }} ₽
                     </div>
-                    <button onclick="togglePrivacyMode()" id="privacy-btn-mob" class="p-1.5 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
-                        <span id="privacy-icon-mob">👁️</span>
+                    <button onclick="togglePrivacyMode()" class="p-1.5 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+                        <span>👁️</span>
                     </button>
                     <a href="/logout" class="p-1.5 text-zinc-400 bg-zinc-900 border border-zinc-800 rounded-lg">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
@@ -98,83 +99,81 @@
                 <span class="text-[10px] text-zinc-500">({{ total_farm_accounts }} ботов всего)</span>
             </div>
 
-            <!-- Панель навигации и действий -->
-            <div class="flex flex-wrap items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t border-zinc-900 sm:border-0">
-                <button onclick="togglePrivacyMode()" id="privacy-btn" class="hidden sm:flex px-3 py-1.5 text-xs font-medium rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition items-center gap-1.5" title="Скрыть логи, пароли, IP и номера">
+            <!-- Навигация и кнопки управления -->
+            <div class="flex flex-wrap items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t border-zinc-900 sm:border-0">
+                
+                <button onclick="togglePrivacyMode()" id="privacy-btn" class="hidden sm:flex px-3 py-1.5 text-xs font-medium rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition items-center gap-1.5">
                     <span id="privacy-icon">👁️</span>
                     <span id="privacy-text" class="hidden md:inline">Скрыть данные</span>
                 </button>
 
-                <!-- Переключатель вкладок -->
-                <div class="flex items-center gap-0.5 sm:gap-1 bg-zinc-900/90 border border-zinc-800/80 p-1 rounded-xl overflow-x-auto max-w-full">
-                    <button onclick="switchTab('main')" id="tab-btn-main" class="px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-lg bg-brand-600 text-white shadow-sm shadow-brand-600/30 transition whitespace-nowrap">Главная</button>
+                <!-- Вкладки -->
+                <div class="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800/80 p-1 rounded-xl overflow-x-auto max-w-full">
+                    <button onclick="switchTab('main')" id="tab-btn-main" class="px-3 py-1 text-xs font-medium rounded-lg bg-brand-600 text-white shadow-sm shadow-brand-600/30 transition whitespace-nowrap">Главная</button>
                     {% if linked_nodes %}
-                    <button onclick="switchTab('node-view')" id="tab-btn-node-view" class="px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition whitespace-nowrap">Ноды</button>
+                    <button onclick="switchTab('node-view')" id="tab-btn-node-view" class="px-3 py-1 text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition whitespace-nowrap">Ноды</button>
                     {% endif %}
-                    <button onclick="switchTab('trash')" id="tab-btn-trash" class="px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition flex items-center gap-1 whitespace-nowrap">
+                    <button onclick="switchTab('trash')" id="tab-btn-trash" class="px-3 py-1 text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition flex items-center gap-1 whitespace-nowrap">
                         Корзина
                         {% if trash_accs %}
-                        <span class="bg-rose-500/20 text-rose-400 text-[9px] px-1.5 py-0.2 rounded-full font-bold">{{ trash_accs|length }}</span>
+                        <span class="bg-rose-500/20 text-rose-400 text-[10px] px-1.5 py-0.2 rounded-full font-bold">{{ trash_accs|length }}</span>
                         {% endif %}
                     </button>
-                    <button onclick="switchTab('settings')" id="tab-btn-settings" class="px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition whitespace-nowrap">Настройки</button>
+                    <button onclick="switchTab('settings')" id="tab-btn-settings" class="px-3 py-1 text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition whitespace-nowrap">Настройки</button>
                 </div>
 
-                <!-- Кнопки рестарта и мульти-VPS -->
-                <div class="flex items-center gap-1.5">
-                    <form action="/service/restart" method="post" class="m-0">
-                        <button type="submit" class="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-medium transition active:scale-95">
-                            Рестарт
-                        </button>
-                    </form>
+                <form action="/service/restart" method="post" class="m-0">
+                    <button type="submit" class="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 px-3 py-1.5 rounded-xl text-xs font-medium transition active:scale-95">
+                        Рестарт
+                    </button>
+                </form>
 
-                    {% if linked_nodes %}
-                    <div class="relative" id="vps-dropdown-wrapper">
-                        <button type="button" onclick="toggleVpsMenu(event)" class="bg-brand-600 hover:bg-brand-500 text-white px-2.5 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-medium transition shadow-md shadow-brand-600/20 active:scale-95 flex items-center gap-1">
-                            <span>⚡ Все VPS ({{ linked_nodes|length }})</span>
-                            <svg id="vps-menu-arrow" class="w-3.5 h-3.5 opacity-80 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                        </button>
-                        
-                        <div id="vps-dropdown-menu" class="hidden absolute right-0 top-full mt-1.5 w-56 rounded-2xl bg-zinc-900 border border-zinc-800 p-2 shadow-2xl z-50 flex-col gap-1">
-                            <form action="/service/restart-all" method="post" class="m-0">
-                                <button type="submit" class="w-full text-left px-3 py-2.5 sm:py-2 rounded-xl text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition flex items-center gap-2">
-                                    <span>⚡</span> Перезапустить все VPS
-                                </button>
-                            </form>
-                            <form action="/accounts/check-balance-all" method="post" class="m-0">
-                                <button type="submit" class="w-full text-left px-3 py-2.5 sm:py-2 rounded-xl text-xs text-emerald-400 hover:bg-emerald-500/10 transition flex items-center gap-2">
-                                    <span>💰</span> Собрать балансы со всех
-                                </button>
-                            </form>
-                            <form action="/accounts/check-health-all" method="post" class="m-0" onsubmit="return confirm('Отправить проверочный /start со всех VPS?')">
-                                <button type="submit" class="w-full text-left px-3 py-2.5 sm:py-2 rounded-xl text-xs text-amber-400 hover:bg-amber-500/10 transition flex items-center gap-2">
-                                    <span>🩺</span> Проверить все через /start
-                                </button>
-                            </form>
-                            <form action="/accounts/withdraw-all" method="post" class="m-0" onsubmit="return confirm('Перенести весь баланс на сайт со ВСЕХ серверов?')">
-                                <button type="submit" class="w-full text-left px-3 py-2.5 sm:py-2 rounded-xl text-xs text-brand-400 hover:bg-brand-500/10 transition flex items-center gap-2 border-t border-zinc-800/80 pt-2">
-                                    <span>💸</span> Слить все балансы на сайт
-                                </button>
-                            </form>
-                        </div>
+                {% if linked_nodes %}
+                <div class="relative group">
+                    <button type="button" class="bg-brand-600 hover:bg-brand-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium transition shadow-md shadow-brand-600/20 active:scale-95 flex items-center gap-1.5">
+                        <span>⚡ Все VPS ({{ linked_nodes|length }})</span>
+                        <svg class="w-3.5 h-3.5 opacity-80 group-hover:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    
+                    <div class="absolute right-0 top-full mt-1.5 w-56 rounded-2xl bg-zinc-900 border border-zinc-800 p-2 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 flex flex-col gap-1">
+                        <form action="/service/restart-all" method="post" class="m-0">
+                            <button type="submit" class="w-full text-left px-3 py-2 rounded-xl text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition flex items-center gap-2">
+                                <span>⚡</span> Перезапустить все VPS
+                            </button>
+                        </form>
+                        <form action="/accounts/check-balance-all" method="post" class="m-0">
+                            <button type="submit" class="w-full text-left px-3 py-2 rounded-xl text-xs text-emerald-400 hover:bg-emerald-500/10 transition flex items-center gap-2">
+                                <span>💰</span> Собрать балансы со всех
+                            </button>
+                        </form>
+                        <form action="/accounts/check-health-all" method="post" class="m-0" onsubmit="return confirm('Отправить проверочный /start со всех VPS?')">
+                            <button type="submit" class="w-full text-left px-3 py-2 rounded-xl text-xs text-amber-400 hover:bg-amber-500/10 transition flex items-center gap-2">
+                                <span>🩺</span> Проверить все через /start
+                            </button>
+                        </form>
+                        <form action="/accounts/withdraw-all" method="post" class="m-0" onsubmit="return confirm('Перенести весь баланс на сайт со ВСЕХ серверов?')">
+                            <button type="submit" class="w-full text-left px-3 py-2 rounded-xl text-xs text-brand-400 hover:bg-brand-500/10 transition flex items-center gap-2 border-t border-zinc-800/80 pt-2">
+                                <span>💸</span> Слить все балансы на сайт
+                            </button>
+                        </form>
                     </div>
-                    {% endif %}
-
-                    <a href="/logout" class="hidden sm:inline-flex p-2 text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition" title="Выход">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                    </a>
                 </div>
+                {% endif %}
+
+                <a href="/logout" class="hidden sm:inline-flex p-2 text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition" title="Выход">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                </a>
             </div>
         </div>
     </header>
 
-    <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+    <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-5">
         
         <!-- ВКЛАДКА: ГЛАВНАЯ -->
-        <div id="tab-main" class="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-            <div class="lg:col-span-1 flex flex-col gap-4 sm:gap-6">
+        <div id="tab-main" class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+            <div class="lg:col-span-1 flex flex-col gap-5">
                 <!-- Карточка добавления аккаунта -->
-                <div class="p-4 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
+                <div class="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
                     <div class="flex items-center gap-2 mb-4">
                         <div class="w-2 h-2 rounded-full bg-brand-400"></div>
                         <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Подключить аккаунт</h2>
@@ -225,51 +224,49 @@
                     </form>
                 </div>
 
-                <!-- Быстрые действия по кассе и пингу -->
-                <div class="p-4 sm:p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl flex flex-col gap-2.5">
+                <!-- Быстрые действия -->
+                <div class="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl flex flex-col gap-2.5">
                     <span class="text-xs font-semibold text-zinc-300 uppercase tracking-wider block mb-1">Действия (Этот сервер)</span>
-                    <div class="grid grid-cols-2 sm:grid-cols-1 gap-2">
-                        <form action="/accounts/check-balance" method="post" class="m-0">
-                            <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-400 text-[11px] sm:text-xs font-medium transition flex items-center justify-center gap-1.5">
-                                <span>💰</span> <span>Балансы</span>
-                            </button>
-                        </form>
-                        <form action="/accounts/benchmark" method="post" class="m-0">
-                            <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sky-400 text-[11px] sm:text-xs font-medium transition flex items-center justify-center gap-1.5">
-                                <span>⚡</span> <span>Пинг</span>
-                            </button>
-                        </form>
-                        <form action="/accounts/withdraw" method="post" class="m-0 col-span-2 sm:col-span-1" onsubmit="return confirm('Вывести баланс всех аккаунтов (от 30 ₽) на сайт?')">
-                            <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-300 text-xs font-medium transition flex items-center justify-center gap-2">
-                                <span>💸</span> <span>Вывести на сайт (от 30 ₽)</span>
-                            </button>
-                        </form>
-                        <form action="/accounts/check-health" method="post" class="m-0 col-span-2 sm:col-span-1" onsubmit="return confirm('Отправить проверочный /start со всех аккаунтов?')">
-                            <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-xs font-medium transition flex items-center justify-center gap-2">
-                                <span>🩺</span> <span>Проверить статус (/start)</span>
-                            </button>
-                        </form>
-                    </div>
+                    <form action="/accounts/check-balance" method="post" class="m-0">
+                        <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-400 text-xs font-medium transition flex items-center justify-center gap-2">
+                            <span>💰</span> Проверить балансы (/balance)
+                        </button>
+                    </form>
+                    <form action="/accounts/benchmark" method="post" class="m-0">
+                        <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sky-400 text-xs font-medium transition flex items-center justify-center gap-2">
+                            <span>⚡</span> Замерить пинг сокетов
+                        </button>
+                    </form>
+                    <form action="/accounts/withdraw" method="post" class="m-0" onsubmit="return confirm('Вывести баланс всех аккаунтов (от 30 ₽) на сайт?')">
+                        <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-emerald-600/20 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-300 text-xs font-medium transition flex items-center justify-center gap-2">
+                            <span>💸</span> Вывести баланс на сайт (от 30 ₽)
+                        </button>
+                    </form>
+                    <form action="/accounts/check-health" method="post" class="m-0" onsubmit="return confirm('Отправить проверочный /start со всех аккаунтов?')">
+                        <button type="submit" class="w-full py-2.5 sm:py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-xs font-medium transition flex items-center justify-center gap-2">
+                            <span>🩺</span> Проверить статус (/start)
+                        </button>
+                    </form>
                 </div>
             </div>
 
-            <!-- Правая колонка: Касса фермы, IP и терминал -->
-            <div class="lg:col-span-3 flex flex-col gap-4 sm:gap-6">
-                <!-- Информационная карточка распределения кассы -->
-                <div class="p-4 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
+            <!-- Правая колонка -->
+            <div class="lg:col-span-3 flex flex-col gap-5">
+                <!-- Сводная касса сети -->
+                <div class="p-5 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
                             <span class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Сводная касса сети</span>
                         </div>
-                        <span class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-xl">
+                        <span class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-xl">
                             ИТОГО: {{ total_farm_balance }} ₽
                         </span>
                     </div>
 
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div class="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-                            <span class="text-[10px] text-zinc-500 block uppercase truncate">Этот сервер</span>
+                            <span class="text-[10px] text-zinc-500 block uppercase">Этот сервер</span>
                             <span class="text-sm font-bold font-mono text-white mt-0.5 block">{{ local_balance }} ₽</span>
                             <span class="text-[10px] text-zinc-400">{{ total_accounts_count }} ботов</span>
                         </div>
@@ -285,23 +282,23 @@
 
                 <!-- Карточки IP адресов -->
                 {% for group in ip_groups %}
-                <div class="p-4 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
-                    <div class="flex justify-between items-center mb-3 sm:mb-4 gap-2">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <span class="w-2.5 h-2.5 rounded-full shrink-0 {% if group.color == 'amber' %}bg-amber-400 shadow-sm shadow-amber-400/50{% else %}bg-brand-400 shadow-sm shadow-brand-400/50{% endif %}"></span>
-                            <span class="text-[11px] sm:text-xs font-semibold tracking-wider uppercase text-zinc-200 truncate">
-                                {% if loop.index0 == 0 %}ОСНОВНОЙ:{% else %}ДОП. IP:{% endif %}
+                <div class="p-5 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full {% if group.color == 'amber' %}bg-amber-400 shadow-sm shadow-amber-400/50{% else %}bg-brand-400 shadow-sm shadow-brand-400/50{% endif %}"></span>
+                            <span class="text-xs font-semibold tracking-wider uppercase text-zinc-200">
+                                {% if loop.index0 == 0 %}ОСНОВНОЙ IP:{% else %}ДОПОЛНИТЕЛЬНЫЙ IP:{% endif %}
                                 <span class="font-mono mask-privacy ml-1">{{ group.ip }}</span>
                             </span>
                         </div>
-                        <span class="text-[10px] sm:text-[11px] font-mono bg-zinc-800/80 px-2 py-0.5 rounded-md text-zinc-400 border border-zinc-700/50 shrink-0">Ботов: {{ group.accounts|length }}</span>
+                        <span class="text-[11px] font-mono bg-zinc-800/80 px-2.5 py-0.5 rounded-md text-zinc-400 border border-zinc-700/50">Ботов: {{ group.accounts|length }}</span>
                     </div>
 
                     {% if group.accounts %}
                     <div class="overflow-x-auto -mx-2 px-2">
-                        <table class="w-full text-left text-xs min-w-[340px]">
+                        <table class="w-full text-left text-xs min-w-[380px]">
                             <thead>
-                                <tr class="text-zinc-500 border-b border-zinc-800/80 pb-2 text-[11px]">
+                                <tr class="text-zinc-500 border-b border-zinc-800/80 pb-2">
                                     <th class="pb-2 font-medium">Сессия</th>
                                     <th class="pb-2 font-medium">Телефон</th>
                                     <th class="pb-2 font-medium text-sky-400">Пинг</th>
@@ -312,22 +309,22 @@
                             <tbody class="divide-y divide-zinc-800/50">
                                 {% for acc in group.accounts %}
                                 <tr class="hover:bg-zinc-800/30 transition-colors">
-                                    <td class="py-2.5 pr-2 font-medium text-zinc-200 truncate max-w-[110px]">{{ acc.session }}</td>
-                                    <td class="py-2.5 pr-2 font-mono text-brand-400 mask-privacy text-[11px] sm:text-xs">{{ acc.phone or '-' }}</td>
-                                    <td class="py-2.5 pr-2 font-mono text-[10px] sm:text-[11px] whitespace-nowrap">
+                                    <td class="py-2.5 font-medium text-zinc-200">{{ acc.session }}</td>
+                                    <td class="py-2.5 font-mono text-brand-400 mask-privacy">{{ acc.phone or '-' }}</td>
+                                    <td class="py-2.5 font-mono text-[11px]">
                                         {% if acc.ping and acc.ping != '-' and acc.ping != 'err' %}
                                         <span class="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-semibold">⚡ {{ acc.ping }}</span>
                                         {% else %}
                                         <span class="text-zinc-600">-</span>
                                         {% endif %}
                                     </td>
-                                    <td class="py-2.5 pr-2 font-mono font-semibold text-emerald-400 whitespace-nowrap">
+                                    <td class="py-2.5 font-mono font-semibold text-emerald-400">
                                         {{ acc.balance or '0.00' }} ₽
                                     </td>
-                                    <td class="py-2.5 text-right whitespace-nowrap">
+                                    <td class="py-2.5 text-right">
                                         <form action="/delete" method="post" onsubmit="return confirm('Отправить сессию в корзину?')" class="m-0">
                                             <input type="hidden" name="session_name" value="{{ acc.session }}">
-                                            <button type="submit" class="text-rose-400 hover:text-rose-300 text-[11px] sm:text-xs transition">В корзину</button>
+                                            <button type="submit" class="text-rose-400 hover:text-rose-300 text-xs transition">В корзину</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -336,23 +333,23 @@
                         </table>
                     </div>
                     {% else %}
-                    <div class="text-center py-5 text-xs text-zinc-500 font-mono">На этом адресе нет активных аккаунтов</div>
+                    <div class="text-center py-6 text-xs text-zinc-500 font-mono">На этом адресе нет активных аккаунтов</div>
                     {% endif %}
                 </div>
                 {% endfor %}
 
-                <!-- Live консоль логов -->
-                <div class="rounded-2xl bg-zinc-950 border border-zinc-800/90 p-4 sm:p-5 shadow-2xl font-mono text-xs">
+                <!-- Консоль логов -->
+                <div class="rounded-2xl bg-zinc-950 border border-zinc-800/90 p-5 shadow-2xl font-mono text-xs">
                     <div class="flex items-center justify-between pb-3 border-b border-zinc-800/80 mb-3">
-                        <div class="flex items-center gap-1.5 sm:gap-2">
+                        <div class="flex items-center gap-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
                             <span class="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></span>
                             <span class="w-2.5 h-2.5 rounded-full bg-green-500/80"></span>
-                            <span class="ml-1 sm:ml-2 text-zinc-400 text-[10px] sm:text-[11px] truncate">farmbot.service - live</span>
+                            <span class="ml-2 text-zinc-400 text-[11px]">farmbot.service - live</span>
                         </div>
                         <button onclick="fetchLogs(true)" class="text-[11px] text-brand-400 hover:text-brand-300 transition">Обновить</button>
                     </div>
-                    <div id="logs" class="text-[10px] sm:text-[11px] text-emerald-400 h-52 sm:h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text" style="resize: vertical; min-height: 140px; max-height: 800px;">
+                    <div id="logs" class="text-[11px] text-emerald-400 h-52 sm:h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text" style="resize: vertical; min-height: 140px; max-height: 800px;">
                         Ожидание вывода системного журнала...
                     </div>
                 </div>
@@ -362,9 +359,9 @@
         <!-- ВКЛАДКА: ПРОСМОТР НОД -->
         {% if linked_nodes %}
         <div id="tab-node-view" class="hidden flex flex-col gap-4">
-            <div class="p-3 sm:p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                    <span class="text-xs text-zinc-400 hidden sm:inline">Сервер:</span>
+            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <span class="text-xs text-zinc-400">Сервер:</span>
                     <select id="node-frame-select" onchange="loadNodeProxy(this.value)" class="w-full sm:w-auto bg-zinc-950 border border-zinc-800 text-brand-400 text-xs rounded-xl px-3 py-2 outline-none">
                         {% for node in linked_nodes %}
                             <option value="{{ loop.index0 }}">🔗 {{ node.name }} ({{ node.url }})</option>
@@ -383,7 +380,7 @@
 
         <!-- ВКЛАДКА: КОРЗИНА -->
         <div id="tab-trash" class="hidden max-w-5xl mx-auto">
-            <div class="p-4 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
+            <div class="p-5 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
                     <div>
                         <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Корзина аккаунтов</h2>
@@ -400,7 +397,7 @@
 
                 {% if trash_accs %}
                 <div class="overflow-x-auto border border-zinc-800 rounded-xl">
-                    <table class="w-full text-left text-xs min-w-[420px]">
+                    <table class="w-full text-left text-xs min-w-[400px]">
                         <thead class="bg-zinc-950 text-zinc-400 font-medium">
                             <tr>
                                 <th class="p-3">Сессия</th>
@@ -414,8 +411,8 @@
                             <tr class="hover:bg-zinc-800/30 transition">
                                 <td class="p-3 font-semibold text-zinc-200">{{ t.session }}</td>
                                 <td class="p-3 font-mono text-brand-400 mask-privacy">{{ t.phone or '-' }}</td>
-                                <td class="p-3 text-[11px] text-amber-400 max-w-[160px] sm:max-w-xs truncate" title="{{ t.trash_reason }}">{{ t.trash_reason or 'Неизвестно' }}</td>
-                                <td class="p-3 text-right whitespace-nowrap">
+                                <td class="p-3 text-[11px] text-amber-400 max-w-xs truncate" title="{{ t.trash_reason }}">{{ t.trash_reason or 'Неизвестно' }}</td>
+                                <td class="p-3 text-right">
                                     <div class="flex items-center justify-end gap-2">
                                         <form action="/trash/restore" method="post">
                                             <input type="hidden" name="session_name" value="{{ t.session }}">
@@ -441,14 +438,14 @@
         </div>
 
         <!-- ВКЛАДКА: НАСТРОЙКИ -->
-        <div id="tab-settings" class="hidden max-w-4xl mx-auto flex flex-col gap-4 sm:gap-6">
-            <div class="p-4 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
+        <div id="tab-settings" class="hidden max-w-4xl mx-auto flex flex-col gap-6">
+            <div class="p-5 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
                 <div class="flex items-center justify-between mb-4">
                     <div>
                         <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Связанные серверы (VPS)</h2>
                         <p class="text-xs text-zinc-400">Сеть нод для переключения, сбора балансов и рестарта</p>
                     </div>
-                    <span class="text-xs bg-zinc-800 text-brand-400 px-2.5 py-1 rounded-md border border-zinc-700 font-mono shrink-0">Узлов: {{ linked_nodes|length }}</span>
+                    <span class="text-xs bg-zinc-800 text-brand-400 px-2.5 py-1 rounded-md border border-zinc-700 font-mono">Узлов: {{ linked_nodes|length }}</span>
                 </div>
 
                 {% if linked_nodes %}
@@ -509,7 +506,7 @@
                 </div>
             </div>
 
-            <div class="p-4 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
+            <div class="p-5 sm:p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 backdrop-blur-sm shadow-xl">
                 <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200 mb-4">Основные параметры</h2>
                 <form action="/settings/save" method="post" class="flex flex-col gap-4">
                     <div>
@@ -576,35 +573,6 @@
     </footer>
 
     <script>
-        // Открытие/закрытие меню Все VPS по клику на телефоне и ПК
-        function toggleVpsMenu(e) {
-            e.stopPropagation();
-            const menu = document.getElementById('vps-dropdown-menu');
-            const arrow = document.getElementById('vps-menu-arrow');
-            if (menu) {
-                const isHidden = menu.classList.contains('hidden');
-                if (isHidden) {
-                    menu.classList.remove('hidden');
-                    menu.classList.add('flex');
-                    if (arrow) arrow.classList.add('rotate-180');
-                } else {
-                    menu.classList.add('hidden');
-                    menu.classList.remove('flex');
-                    if (arrow) arrow.classList.remove('rotate-180');
-                }
-            }
-        }
-
-        document.addEventListener('click', () => {
-            const menu = document.getElementById('vps-dropdown-menu');
-            const arrow = document.getElementById('vps-menu-arrow');
-            if (menu && !menu.classList.contains('hidden')) {
-                menu.classList.add('hidden');
-                menu.classList.remove('flex');
-                if (arrow) arrow.classList.remove('rotate-180');
-            }
-        });
-
         function togglePassVisibility() {
             const el = document.getElementById('admin_pass_input');
             el.type = el.type === 'password' ? 'text' : 'password';
@@ -618,17 +586,14 @@
 
         function updatePrivacyButton(isPrivacy) {
             const icon = document.getElementById('privacy-icon');
-            const iconMob = document.getElementById('privacy-icon-mob');
             const text = document.getElementById('privacy-text');
             const btn = document.getElementById('privacy-btn');
             if (isPrivacy) {
                 if (icon) icon.innerText = '🔒';
-                if (iconMob) iconMob.innerText = '🔒';
                 if (text) text.innerText = 'Данные скрыты';
                 if (btn) btn.classList.add('border-brand-500/50', 'text-brand-400');
             } else {
                 if (icon) icon.innerText = '👁️';
-                if (iconMob) iconMob.innerText = '👁️';
                 if (text) text.innerText = 'Скрыть данные';
                 if (btn) btn.classList.remove('border-brand-500/50', 'text-brand-400');
             }
@@ -646,10 +611,10 @@
                 if (el && btn) {
                     if (t === tab) {
                         el.classList.remove('hidden');
-                        btn.className = 'px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-lg bg-brand-600 text-white shadow-sm shadow-brand-600/30 transition flex items-center gap-1 whitespace-nowrap';
+                        btn.className = 'px-3 py-1 text-xs font-medium rounded-lg bg-brand-600 text-white shadow-sm shadow-brand-600/30 transition flex items-center gap-1.5';
                     } else {
                         el.classList.add('hidden');
-                        btn.className = 'px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition flex items-center gap-1 whitespace-nowrap';
+                        btn.className = 'px-3 py-1 text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition flex items-center gap-1.5';
                     }
                 }
             });
