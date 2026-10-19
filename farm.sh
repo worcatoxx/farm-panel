@@ -7,18 +7,19 @@ SKY="\033[0;36m"
 PLAIN="\033[0m"
 
 DIR="/root/farm_panel"
+DATA_DIR="/root/farm_data"
 
 show_menu() {
     clear
     echo -e "${SKY}==================================================${PLAIN}"
-    echo -e "${SKY}        FarmBot Sniper - Панель управления        ${PLAIN}"
+    echo -e "${SKY}     FarmBot Sniper v3.0 - Панель управления      ${PLAIN}"
     echo -e "${SKY}==================================================${PLAIN}"
     
     if systemctl is-active --quiet farmbot; then
-        echo -e " Статус Бота:       ${GREEN}● Работает (active)${PLAIN}"
+        echo -e " Статус Снайпера:   ${GREEN}● Работает (active)${PLAIN}"
     else
         ST=$(systemctl is-active farmbot 2>/dev/null || echo "not-found")
-        echo -e " Статус Бота:       ${RED}● Остановлен ($ST)${PLAIN}"
+        echo -e " Статус Снайпера:   ${RED}● Остановлен ($ST)${PLAIN}"
     fi
 
     if systemctl is-active --quiet farmweb; then
@@ -26,6 +27,20 @@ show_menu() {
     else
         ST=$(systemctl is-active farmweb 2>/dev/null || echo "not-found")
         echo -e " Статус Веб-панели: ${RED}● Остановлен ($ST)${PLAIN}"
+    fi
+
+    if [ -f "$DATA_DIR/accounts.json" ] && [ -x "$DIR/venv/bin/python3" ]; then
+        STATS=$("$DIR/venv/bin/python3" -c '
+import json
+try:
+    with open("/root/farm_data/accounts.json", "r", encoding="utf-8") as f:
+        accs = json.load(f)
+    bal = sum(float(str(a.get("balance", 0)).replace(",", ".")) for a in accs)
+    print(f"{len(accs)} акк. | Касса: {bal:.2f} ₽")
+except Exception:
+    print("н/д")
+' 2>/dev/null)
+        echo -e " Боевой состав:     ${YELLOW}${STATS}${PLAIN}"
     fi
 
     echo -e "${SKY}--------------------------------------------------${PLAIN}"
@@ -48,7 +63,9 @@ while true; do
     show_menu
     case "$choice" in
         1)
-            echo -e "\n${YELLOW}[*] Обновление кода из GitHub...${PLAIN}"
+            echo -e "\n${YELLOW}[*] Сохранение сессий и обновление кода из GitHub...${PLAIN}"
+            mkdir -p "$DATA_DIR"
+            cp -n "$DIR"/*.session "$DATA_DIR"/ 2>/dev/null || true
             cd "$DIR" || exit 1
             git fetch --all
             git reset --hard origin/main
@@ -93,9 +110,10 @@ while true; do
             read -p "Нажмите Enter для продолжения..."
             ;;
         8)
-            echo -e "\n${YELLOW}[*] Перезапуск бота с проверкой через /start...${PLAIN}"
+            echo -e "\n${YELLOW}[*] Проверка всех аккаунтов через отправку /start целевому боту...${PLAIN}"
+            cd "$DIR" && "$DIR/venv/bin/python3" -c "import web; web.run_tg(web._run_health_checks())"
             systemctl restart farmbot
-            echo -e "${GREEN}[✓] Проверка завершена.${PLAIN}"
+            echo -e "${GREEN}[✓] Проверка завершена, снайпер перезапущен!${PLAIN}"
             read -p "Нажмите Enter для продолжения..."
             ;;
         9)
