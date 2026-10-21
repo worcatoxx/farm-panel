@@ -1,3 +1,7 @@
 flask
 telethon
 requests
+opencv-python-headless
+rapidocr-onnxruntime
+numpy
+pillow
