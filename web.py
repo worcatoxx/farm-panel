@@ -55,6 +55,7 @@ from bot import (
     MOBILE_EVENTS_FILE,
     WARMUP_TRIGGER_FILE,
     _atomic_write_json,
+    extract_voucher_from_image,
     extract_voucher_from_message,
     get_device_fingerprint,
     is_fatal_account_error,
@@ -123,7 +124,11 @@ def _load_or_create_secret_key() -> bytes:
     return key
 
 
-app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static"),
+)
 app.secret_key = _load_or_create_secret_key()
 
 login_sessions = {}
@@ -1827,9 +1832,40 @@ def check_health_all_route():
 # --- Тестер парсера ваучеров, уравнений и ответов целевого бота ---
 @app.route("/api/test-voucher", methods=["POST"])
 def api_test_voucher():
-    payload = request.get_json(silent=True) or {}
-    raw_text = str(payload.get("text", "") or "")
-    code = extract_voucher_from_message(raw_text, None)
+    ocr_time_ms = None
+    ocr_text = ""
+    is_photo = False
+    code = None
+    raw_text = ""
+
+    if "photo" in request.files:
+        photo_file = request.files["photo"]
+        photo_bytes = photo_file.read()
+        if photo_bytes:
+            is_photo = True
+            t0 = time.perf_counter()
+            code, ocr_text = extract_voucher_from_image(photo_bytes)
+            ocr_time_ms = round((time.perf_counter() - t0) * 1000, 1)
+            raw_text = ocr_text
+    else:
+        payload = request.get_json(silent=True) or {}
+        image_b64 = payload.get("image_base64")
+        if image_b64:
+            is_photo = True
+            if "," in image_b64:
+                image_b64 = image_b64.split(",", 1)[1]
+            try:
+                photo_bytes = base64.b64decode(image_b64)
+                t0 = time.perf_counter()
+                code, ocr_text = extract_voucher_from_image(photo_bytes)
+                ocr_time_ms = round((time.perf_counter() - t0) * 1000, 1)
+                raw_text = ocr_text
+            except Exception as e:
+                return jsonify({"error": f"Base64 error: {e}"}), 400
+        else:
+            raw_text = str(payload.get("text", "") or "")
+            code = extract_voucher_from_message(raw_text, None)
+
     solved_x = solve_math_equation(raw_text)
     final_code = code
     if final_code and "*" in final_code and solved_x is not None:
@@ -1842,6 +1878,9 @@ def api_test_voucher():
         "raw_code": code,
         "solved_x": solved_x,
         "final_code": final_code,
+        "is_photo": is_photo,
+        "ocr_time_ms": ocr_time_ms,
+        "ocr_text": ocr_text if is_photo else None,
         "success": bool(final_code and "*" not in final_code),
         "bot_reply_status": bot_reply_parsed.get("status"),
         "bot_reply_amount": bot_reply_parsed.get("amount"),
@@ -2129,18 +2168,26 @@ def get_logs():
 
     if os.name == "nt":
         return jsonify({
-            "logs": "[12:00:01] [*] Запуск FarmBot Sniper PRO v3.9 (Windows Dev Mode)\n[12:00:02] [✓] Служба активна и ожидает ваучеры..."
+            "logs": "[12:00:01] [*] Запуск FarmBot Sniper PRO v5.0 (Ultra ONNX OCR)\n[12:00:02] [✓] Служба активна и ожидает ваучеры..."
         })
 
     try:
+        cmd = ["journalctl", "-u", unit, "-n", "80", "--no-pager"]
+        if not show_raw:
+            cmd.append("-o")
+            cmd.append("cat")
         out = subprocess.check_output(
-            ["journalctl", "-u", unit, "-n", "120", "--no-pager"],
+            cmd,
             text=True,
             stderr=subprocess.STDOUT,
-            timeout=3,
+            timeout=8,
         )
         final_logs = out if show_raw else _clean_journal_output(out)
         return jsonify({"logs": final_logs or "Журнал пуст — ожидаем события..."})
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            "logs": f"[{datetime.now().strftime('%H:%M:%S')}] [INFO] Процессор занят обработкой ваучера (1 vCPU) — служба активна, журнал обновится через несколько секунд."
+        })
     except Exception as e:
         return jsonify({"logs": f"Ошибка чтения логов ({unit}): {e}"})
 

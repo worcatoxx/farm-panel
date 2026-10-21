@@ -18,7 +18,7 @@ dpkg --configure -a
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-    git python3 python3-pip python3-venv curl ufw iptables nginx unzip
+    git python3 python3-pip python3-venv curl ufw iptables nginx unzip libgl1 libglib2.0-0 libgomp1
 
 echo "=== [2/6] Настройка сети и портов ==="
 iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
@@ -58,7 +58,7 @@ if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 ./venv/bin/pip install --upgrade pip
-./venv/bin/pip install flask telethon requests
+./venv/bin/pip install flask telethon requests pillow numpy opencv-python-headless rapidocr-onnxruntime
 
 if [ ! -f "$DATA_DIR/config.json" ]; then
     cat << 'EOF' > "$DATA_DIR/config.json"

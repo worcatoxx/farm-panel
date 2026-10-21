@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FarmBot Sniper PRO — Панель управления</title>
+    <title>FarmBot Sniper PRO v5.0 — Панель управления</title>
     <!-- БЛОК 1.1: Режим PWA (Установка как приложение на iPhone и Android) -->
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg">
@@ -41,6 +41,12 @@
             --accent: #7c3aed;
             --accent-hover: #8b5cf6;
             --accent-glow: rgba(124, 58, 237, 0.25);
+            /* Огненная палитра (Аметистовое пламя) */
+            --flame-core: #ffffff;
+            --flame-mid: #c084fc;
+            --flame-outer: #9333ea;
+            --flame-deep: #581c87;
+            --flame-glow: rgba(168, 85, 247, 0.65);
         }
 
         [data-theme="amoled-blue"] {
@@ -55,6 +61,12 @@
             --accent: #2563EB;
             --accent-hover: #3B82F6;
             --accent-glow: rgba(37, 99, 235, 0.3);
+            /* Огненная палитра (Сапфировое пламя) */
+            --flame-core: #ffffff;
+            --flame-mid: #60a5fa;
+            --flame-outer: #2563eb;
+            --flame-deep: #1e3a8a;
+            --flame-glow: rgba(59, 130, 246, 0.65);
         }
 
         [data-theme="dark-blue"] {
@@ -69,6 +81,12 @@
             --accent: #38BDF8;
             --accent-hover: #7DD3FC;
             --accent-glow: rgba(56, 189, 248, 0.25);
+            /* Огненная палитра (Кобальтовый огонь) */
+            --flame-core: #ffffff;
+            --flame-mid: #38bdf8;
+            --flame-outer: #0284c7;
+            --flame-deep: #075985;
+            --flame-glow: rgba(56, 189, 248, 0.65);
         }
 
         [data-theme="full-blue"] {
@@ -83,6 +101,12 @@
             --accent: #00F2FE;
             --accent-hover: #4FACFE;
             --accent-glow: rgba(0, 242, 254, 0.25);
+            /* Огненная палитра (Плазменная вспышка) */
+            --flame-core: #ffffff;
+            --flame-mid: #00f2fe;
+            --flame-outer: #0099ff;
+            --flame-deep: #0044aa;
+            --flame-glow: rgba(0, 242, 254, 0.7);
         }
 
         [data-theme="amoled-emerald"] {
@@ -97,6 +121,12 @@
             --accent: #10B981;
             --accent-hover: #34D399;
             --accent-glow: rgba(16, 185, 129, 0.25);
+            /* Огненная палитра (Изумрудный огонь) */
+            --flame-core: #ffffff;
+            --flame-mid: #34d399;
+            --flame-outer: #10b981;
+            --flame-deep: #064e3b;
+            --flame-glow: rgba(16, 185, 129, 0.65);
         }
 
         [data-theme="sunset-dark"] {
@@ -111,6 +141,12 @@
             --accent: #F97316;
             --accent-hover: #FB923C;
             --accent-glow: rgba(249, 115, 22, 0.25);
+            /* Огненная палитра (Адское пламя / Лава) */
+            --flame-core: #fffbeb;
+            --flame-mid: #fbbf24;
+            --flame-outer: #f97316;
+            --flame-deep: #dc2626;
+            --flame-glow: rgba(249, 115, 22, 0.75);
         }
 
         [data-theme="light-tech"] {
@@ -125,6 +161,11 @@
             --accent: #2563EB;
             --accent-hover: #1D4ED8;
             --accent-glow: rgba(37, 99, 235, 0.16);
+            --flame-core: #ffffff;
+            --flame-mid: #60a5fa;
+            --flame-outer: #2563eb;
+            --flame-deep: #1e40af;
+            --flame-glow: rgba(37, 99, 235, 0.45);
         }
 
         [data-theme="warm-craft"] {
@@ -139,6 +180,11 @@
             --accent: #FF4F00;
             --accent-hover: #E04600;
             --accent-glow: rgba(255, 79, 0, 0.16);
+            --flame-core: #ffffff;
+            --flame-mid: #fb923c;
+            --flame-outer: #ff4f00;
+            --flame-deep: #c2410c;
+            --flame-glow: rgba(255, 79, 0, 0.55);
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -886,6 +932,113 @@
             60% { transform: scale(1.06); }
             100% { transform: scale(1); }
         }
+
+        /* =====================================================================
+           ОГНЕННЫЙ БЕЙДЖ: ВЕРСИЯ 5 (BURNING FLAME EFFECT ДЛЯ ШАПКИ)
+           ===================================================================== */
+        .flame-badge-header {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: 9999px;
+            background: radial-gradient(ellipse at bottom, rgba(0,0,0,0.7) 0%, var(--bg-sub) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 
+                0 0 16px -1px var(--flame-glow),
+                inset 0 -3px 8px -1px var(--flame-deep),
+                inset 0 1px 1px rgba(255, 255, 255, 0.25);
+            line-height: 1;
+            cursor: default;
+            transition: transform 0.3s var(--spring-bounce);
+        }
+        .flame-badge-header:hover {
+            transform: scale(1.08);
+        }
+        .flame-aura {
+            position: absolute;
+            inset: -3px;
+            border-radius: 9999px;
+            background: radial-gradient(circle, var(--flame-glow) 20%, transparent 75%);
+            filter: blur(6px);
+            opacity: 0.85;
+            animation: flameAuraPulse 2s ease-in-out infinite alternate;
+            z-index: -1;
+            pointer-events: none;
+        }
+        @keyframes flameAuraPulse {
+            0% { transform: scale(0.96); opacity: 0.6; }
+            50% { transform: scale(1.08) translateY(-1px); opacity: 0.95; }
+            100% { transform: scale(1.02); opacity: 0.75; }
+        }
+        .burning-fire-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 800;
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, 
+                var(--flame-core) 0%, 
+                var(--flame-mid) 40%, 
+                var(--flame-outer) 75%, 
+                var(--flame-deep) 100%
+            );
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: 
+                drop-shadow(0 -1px 2px var(--flame-core))
+                drop-shadow(0 -2px 5px var(--flame-mid))
+                drop-shadow(0 -4px 9px var(--flame-outer))
+                drop-shadow(0 -7px 16px var(--flame-deep));
+            animation: flameFlicker 1.8s ease-in-out infinite alternate;
+            display: inline-block;
+        }
+        @keyframes flameFlicker {
+            0% {
+                filter: 
+                    drop-shadow(0 -1px 2px var(--flame-core))
+                    drop-shadow(0 -2px 4px var(--flame-mid))
+                    drop-shadow(0 -4px 8px var(--flame-outer))
+                    drop-shadow(0 -6px 14px var(--flame-deep));
+                transform: translateY(0) scale(1);
+            }
+            35% {
+                filter: 
+                    drop-shadow(0 -1px 2px var(--flame-core))
+                    drop-shadow(0 -3px 8px var(--flame-mid))
+                    drop-shadow(0 -5px 12px var(--flame-outer))
+                    drop-shadow(0 -8px 18px var(--flame-deep));
+                transform: translateY(-0.5px) scale(1.02);
+            }
+            70% {
+                filter: 
+                    drop-shadow(0 -1px 1.5px var(--flame-core))
+                    drop-shadow(0 -2px 5px var(--flame-mid))
+                    drop-shadow(0 -4px 9px var(--flame-outer))
+                    drop-shadow(0 -7px 15px var(--flame-deep));
+                transform: translateY(0.3px) scale(0.99);
+            }
+            100% {
+                filter: 
+                    drop-shadow(0 -1.5px 3px var(--flame-core))
+                    drop-shadow(0 -4px 9px var(--flame-mid))
+                    drop-shadow(0 -6px 14px var(--flame-outer))
+                    drop-shadow(0 -10px 22px var(--flame-deep));
+                transform: translateY(-0.8px) scale(1.02);
+            }
+        }
+        .flame-icon-svg {
+            width: 12px;
+            height: 12px;
+            filter: drop-shadow(0 0 4px var(--flame-mid)) drop-shadow(0 0 8px var(--flame-outer));
+            animation: flameWiggle 1.5s ease-in-out infinite alternate;
+        }
+        @keyframes flameWiggle {
+            0% { transform: rotate(-5deg) scale(0.95); }
+            50% { transform: rotate(6deg) scale(1.12) translateY(-0.5px); }
+            100% { transform: rotate(-2deg) scale(1.04); }
+        }
     </style>
     <script>
         (function() {
@@ -1013,9 +1166,21 @@
                     <div>
                         <div class="flex items-center gap-2 flex-wrap">
                             <span class="font-bold text-sm tracking-tight text-white">FarmBot <span class="text-theme-accent">Sniper</span></span>
-                            <span class="text-[10px] px-2 py-0.5 rounded-lg font-mono font-semibold" style="background: var(--accent-glow); color: var(--accent); border: 1px solid var(--border);">
-                                {% if linked_nodes %}MASTER v3.9{% else %}PRO v3.9{% endif %}
-                            </span>
+                            <div class="flame-badge-header cursor-pointer select-none active:scale-90 transition-transform" id="version-badge" onclick="triggerEasterEgg()" title="FarmBot Sniper PRO v5.0 (Кликни 5 раз подряд!)">
+                                <div class="flame-aura"></div>
+                                <svg class="flame-icon-svg" viewBox="0 0 24 24" fill="url(#headerFlameGrad)">
+                                    <defs>
+                                        <linearGradient id="headerFlameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+                                            <stop offset="0%" stop-color="var(--flame-deep)" />
+                                            <stop offset="50%" stop-color="var(--flame-outer)" />
+                                            <stop offset="85%" stop-color="var(--flame-mid)" />
+                                            <stop offset="100%" stop-color="var(--flame-core)" />
+                                        </linearGradient>
+                                    </defs>
+                                    <path d="M12 23c-4.97 0-9-3.8-9-8.5C3 8.7 8.5 2 12 1c1.5 2.5 4 6.5 4 9.5 0 .5-.1 1-.2 1.5 1.2-1.3 1.8-2.7 2-3.8 2.2 2.6 3.2 5.5 3.2 8.3 0 4.7-4.03 8.5-9 8.5zm-.5-5.5c2.48 0 4.5-1.79 4.5-4 0-1.8-1.5-4-3-5.5-.8 1.3-1.5 2.5-1.5 4 0 .3.1.6.2.9-.6-.6-1-1.3-1.2-2-1 1.4-1.5 3.1-1.5 4.6 0 1.1.4 2 1.1 2.7.4.2.9.3 1.4.3z"/>
+                                </svg>
+                                <span class="burning-fire-text">{% if linked_nodes %}MASTER v5.0{% else %}PRO v5.0{% endif %}</span>
+                            </div>
                             <span id="header-service-badge" class="inline-flex items-center gap-1.5 text-[10px] {% if service_status == 'active' %}bg-emerald-500/10 text-emerald-400 border-emerald-500/25{% else %}bg-rose-500/10 text-rose-400 border-rose-500/25{% endif %} border px-2.5 py-0.5 rounded-full font-mono font-semibold">
                                 <span class="w-1.5 h-1.5 rounded-full {% if service_status == 'active' %}bg-emerald-400 animate-pulse{% else %}bg-rose-400{% endif %}"></span>
                                 <span id="header-service-text">{% if service_status == 'active' %}РАБОТАЕТ{% else %}{{ service_status|upper }}{% endif %}</span>
@@ -1031,57 +1196,74 @@
                     </div>
                 </div>
 
-                <!-- Мобильная правая часть -->
-                <div class="flex sm:hidden items-center gap-1">
-                    <button type="button" onclick="toggleCardCollapse('theme-bar')" class="btn-surface p-2 rounded-xl" title="Темы оформления">
+                <!-- Мобильная панель быстрых действий (Start/Restart, Темы, Приватность, Выход) -->
+                <div class="flex sm:hidden items-center gap-1.5">
+                    {% if service_status != 'active' %}
+                    <form action="/service/start" method="post" class="m-0 ajax-form">
+                        <button type="submit" class="btn-emerald px-2 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-md cursor-pointer" title="Запустить снайпер">
+                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            <span>Старт</span>
+                        </button>
+                    </form>
+                    {% else %}
+                    <form action="/service/restart" method="post" class="m-0 ajax-form">
+                        <button type="submit" class="btn-surface p-2 rounded-xl text-theme-accent active:scale-95 transition cursor-pointer" title="Перезапустить снайпер">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        </button>
+                    </form>
+                    {% endif %}
+                    <button type="button" onclick="toggleCardCollapse('theme-bar')" class="btn-surface p-2 rounded-xl active:scale-95 transition cursor-pointer" title="Темы оформления">
                         <svg class="w-4 h-4 text-theme-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
                     </button>
-                    <button onclick="togglePrivacyMode()" class="btn-surface p-2 rounded-xl" title="Приватность">
+                    <button type="button" onclick="togglePrivacyMode()" class="btn-surface p-2 rounded-xl active:scale-95 transition cursor-pointer" title="Приватность">
                         <svg class="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                     </button>
+                    <a href="/logout" class="btn-surface p-2 rounded-xl text-zinc-400 active:scale-95 transition cursor-pointer" title="Выйти">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    </a>
                 </div>
             </div>
 
-            <!-- Центральные навигационные вкладки (с новой вкладкой «Почта» Temp Mail) -->
-            <div class="flex items-center gap-1 card-sub p-1 rounded-2xl overflow-x-auto max-w-full">
-                <button onclick="switchTab('main')" id="tab-btn-main" class="nav-tab active px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <!-- Центральные навигационные вкладки с горизонтальным touch-скроллом -->
+            <div class="tabs-scroll-wrapper flex items-center gap-1.5 card-sub p-1.5 rounded-2xl overflow-x-auto max-w-full touch-pan-x" style="-webkit-overflow-scrolling: touch; scrollbar-width: none;">
+                <button onclick="switchTab('main')" id="tab-btn-main" class="nav-tab active px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
                     </svg>
                     <span>Главная</span>
                 </button>
-                <button onclick="switchTab('vouchers')" id="tab-btn-vouchers" class="nav-tab px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <button onclick="switchTab('vouchers')" id="tab-btn-vouchers" class="nav-tab px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/>
                     </svg>
                     <span>Ваучеры</span>
                     {% if vouchers_total_count %}
-                    <span class="bg-black/25 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold">{{ vouchers_total_count }}</span>
+                    <span class="bg-black/30 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold">{{ vouchers_total_count }}</span>
                     {% endif %}
                 </button>
-                <button onclick="switchTab('tempmail')" id="tab-btn-tempmail" class="nav-tab px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <button onclick="switchTab('tempmail')" id="tab-btn-tempmail" class="nav-tab px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
                     <span>Почта</span>
                 </button>
                 {% if linked_nodes %}
-                <button onclick="switchTab('node-view')" id="tab-btn-node-view" class="nav-tab px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <button onclick="switchTab('node-view')" id="tab-btn-node-view" class="nav-tab px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
                     </svg>
                     <span>Ноды ({{ linked_nodes|length }})</span>
                 </button>
                 {% endif %}
-                <button onclick="switchTab('trash')" id="tab-btn-trash" class="nav-tab px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <button onclick="switchTab('trash')" id="tab-btn-trash" class="nav-tab px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                     </svg>
                     <span>Корзина</span>
                     <span id="nav-trash-badge" class="{% if not trash_accs %}hidden{% endif %} bg-rose-500/25 text-rose-400 text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold">{{ trash_accs|length }}</span>
                 </button>
-                <button onclick="switchTab('settings')" id="tab-btn-settings" class="nav-tab px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <button onclick="switchTab('settings')" id="tab-btn-settings" class="nav-tab px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
@@ -1171,9 +1353,12 @@
         </div>
     </header>
 
-    <main class="flex-1 max-w-[1640px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-5">
+    <main class="flex-1 max-w-[1640px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5">
 
-        <!-- КОМПАКТНАЯ СТРОКА УПРАВЛЕНИЯ ВИДЖЕТАМИ -->
+        <!-- ВКЛАДКА: ГЛАВНАЯ (СВОДКА, KPI ПЛИТКИ, СЕССИИ, ТЕРМИНАЛ) -->
+        <div id="tab-main" class="flex flex-col gap-4">
+
+            <!-- КОМПАКТНАЯ СТРОКА УПРАВЛЕНИЯ ВИДЖЕТАМИ -->
         <div class="flex items-center justify-between gap-2 mb-3">
             <div class="flex items-center gap-1.5">
                 <button type="button" onclick="toggleCardCollapse('kpi-section')" class="btn-surface px-2.5 py-1 rounded-full text-[11px] font-semibold inline-flex items-center gap-1.5 cursor-pointer" title="Свернуть или развернуть сводку">
@@ -1317,8 +1502,13 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="text-xl font-extrabold font-mono text-amber-500">
-                            {% if vouchers_history %}{{ vouchers_history[0].elapsed_ms }} ms{% else %}Zero-RPC{% endif %}
+                        <div class="text-xl font-extrabold font-mono text-amber-500 flex items-baseline gap-2 flex-wrap">
+                            <span>{% if vouchers_history %}{{ vouchers_history[0].elapsed_ms }} ms{% else %}Zero-RPC{% endif %}</span>
+                            {% if vouchers_history and vouchers_history[0].ocr_time_ms %}
+                            <span class="text-[11px] font-bold text-sky-400 bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title="Время считывания фото ваучера через RapidOCR">
+                                📷 OCR: <b class="text-cyan-300 font-mono">{{ vouchers_history[0].ocr_time_ms }} ms</b>
+                            </span>
+                            {% endif %}
                         </div>
                         <div class="text-[11px] text-zinc-400 mt-1.5 flex items-center justify-between">
                             <span>Режим: <b class="text-zinc-200 font-mono">Кэш Peer</b></span>
@@ -1353,8 +1543,8 @@
             </div>
         </div>
 
-        <!-- ВКЛАДКА: ГЛАВНАЯ -->
-        <div id="tab-main" class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- СЕТКА АККАУНТОВ И ТЕРМИНАЛА -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
             <!-- Левая колонка (4 из 12) -->
             <div class="lg:col-span-4 xl:col-span-3 flex flex-col gap-5">
 
@@ -1831,20 +2021,40 @@
                 </div>
             </div>
         </div>
+        </div> <!-- /#tab-main -->
 
-        <!-- ВКЛАДКА: ИСТОРИЯ ВАУЧЕРОВ И ТЕСТЕР КАПЧИ + ПАРСЕРА ОТВЕТОВ -->
+        <!-- ВКЛАДКА: ИСТОРИЯ ВАУЧЕРОВ И ТЕСТЕР КАПЧИ + ПАРСЕРА ОТВЕТОВ + ФОТО OCR -->
         <div id="tab-vouchers" class="hidden max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <!-- Тестер парсера, капчи и ответов целевого бота -->
+            <!-- Тестер парсера, капчи, фото OCR и ответов целевого бота -->
             <div class="lg:col-span-1 card-surface p-5 rounded-3xl flex flex-col gap-4 h-fit">
                 <div>
                     <div class="flex items-center gap-2 mb-1">
                         <svg class="w-4 h-4 text-theme-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                        <h2 class="text-sm font-bold uppercase tracking-wider text-white">Тестер капчи и парсера</h2>
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-white">Тестер ваучеров и Фото OCR</h2>
                     </div>
-                    <p class="text-xs text-zinc-400">Проверьте решение уравнений со звездочкой <code class="text-theme-accent">*</code> или распознавание ответа целевого бота об активации и балансе.</p>
+                    <p class="text-xs text-zinc-400">Проверьте распознавание ваучера из фото, решение уравнений со звездочкой <code class="text-theme-accent">*</code> или разбор ответа бота.</p>
                 </div>
 
-                <textarea id="tester-input" rows="5" placeholder="Вставьте текст поста с ваучером ИЛИ ответ целевого бота, например:&#10;Ваучер успешно активирован! Начислено 25 ₽. Ваш баланс: 55 ₽" class="input-box w-full rounded-2xl p-3 text-xs font-mono outline-none"></textarea>
+                <!-- Зона загрузки / вставки фото для OCR -->
+                <div id="tester-dropzone" onclick="document.getElementById('tester-file-input').click()" class="border-2 border-dashed border-zinc-700/80 hover:border-theme-accent/80 transition rounded-2xl p-3 flex flex-col items-center justify-center text-center cursor-pointer bg-white/[0.02]">
+                    <input type="file" id="tester-file-input" accept="image/*" class="hidden" onchange="handleTesterFileSelect(event)">
+                    <div class="flex items-center gap-2 text-zinc-300 text-xs font-medium">
+                        <svg class="w-4 h-4 text-theme-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <span>Загрузить или вставить фото с ваучером</span>
+                    </div>
+                    <span class="text-[10px] text-zinc-500 mt-0.5">Кликните, перетащите файл или вставьте скриншот (Ctrl+V)</span>
+                    <div id="tester-preview-wrap" class="hidden mt-2 relative">
+                        <img id="tester-img-preview" class="max-h-24 rounded-lg border border-white/10 mx-auto object-contain">
+                        <button type="button" onclick="event.stopPropagation(); clearTesterPhoto()" class="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow cursor-pointer">✕</button>
+                    </div>
+                </div>
+
+                <div class="relative flex items-center justify-center">
+                    <span class="absolute inset-0 flex items-center"><span class="w-full border-t border-zinc-800"></span></span>
+                    <span class="relative bg-zinc-900 px-2 text-[10px] uppercase tracking-wider text-zinc-500 font-mono">ИЛИ ВСТАВЬТЕ ТЕКСТ</span>
+                </div>
+
+                <textarea id="tester-input" rows="4" placeholder="Вставьте текст поста с ваучером ИЛИ ответ целевого бота, например:&#10;Ваучер успешно активирован! Начислено 25 ₽. Ваш баланс: 55 ₽" class="input-box w-full rounded-2xl p-3 text-xs font-mono outline-none"></textarea>
 
                 <div class="grid grid-cols-2 gap-2">
                     <button type="button" onclick="fillTesterSample()" class="btn-surface px-3 py-2 rounded-2xl text-xs font-medium cursor-pointer">
@@ -1856,13 +2066,15 @@
                 </div>
 
                 <button type="button" onclick="runVoucherTester()" class="btn-primary w-full py-2.5 rounded-2xl text-xs font-semibold cursor-pointer">
-                    Проверить парсер и решатель
+                    Проверить ваучер / Фото OCR
                 </button>
 
                 <div id="tester-result" class="hidden card-sub p-4 rounded-2xl text-xs font-mono flex-col gap-2">
+                    <div id="row-ocr-time" class="hidden justify-between items-center py-1.5 px-3 rounded-xl bg-sky-500/10 border border-sky-500/25"><span class="text-sky-400 font-semibold flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-sky-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>Пинг считывания фото:</span> <span id="res-ocr-time" class="text-cyan-300 font-bold font-mono text-sm">-</span></div>
                     <div class="flex justify-between"><span class="text-zinc-500">Шаблон ваучера:</span> <span id="res-raw" class="text-amber-500 font-bold">-</span></div>
                     <div class="flex justify-between"><span class="text-zinc-500">Решенный X:</span> <span id="res-x" class="text-sky-500 font-bold">-</span></div>
                     <div class="flex justify-between"><span class="text-zinc-500">Готовый код:</span> <span id="res-final" class="text-emerald-500 font-bold">-</span></div>
+                    <div id="row-ocr-text" class="hidden flex-col gap-1 pt-1 border-t border-zinc-800"><span class="text-zinc-500 text-[10px]">Текст из фото (OCR):</span> <pre id="res-ocr-text" class="text-[10px] text-zinc-400 max-h-16 overflow-y-auto whitespace-pre-wrap"></pre></div>
                     <div class="flex justify-between pt-2 border-t border-zinc-800"><span class="text-zinc-400">Статус ответа бота:</span> <span id="res-bot-status" class="text-theme-accent font-bold">-</span></div>
                     <div class="flex justify-between"><span class="text-zinc-400">Начислено / Баланс:</span> <span id="res-bot-sums" class="text-emerald-400 font-bold">-</span></div>
                 </div>
@@ -1906,7 +2118,17 @@
                             {% for v in vouchers_history %}
                             <tr class="hover:bg-white/[0.02] transition">
                                 <td class="p-3 text-zinc-400 text-[11px] whitespace-nowrap">{{ v.time }}</td>
-                                <td class="p-3 font-bold text-emerald-500 whitespace-nowrap">{{ v.code }}</td>
+                                <td class="p-3 font-bold text-emerald-500 whitespace-nowrap">
+                                    <div class="inline-flex items-center gap-1.5 flex-wrap">
+                                        <span>{{ v.code }}</span>
+                                        {% if v.source == 'photo_ocr' %}
+                                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30 font-medium inline-flex items-center gap-1">
+                                            <svg class="w-3 h-3 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                            Фото OCR{% if v.ocr_time_ms %}: <b class="text-cyan-300 font-mono">{{ v.ocr_time_ms }} ms</b>{% endif %}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </td>
                                 <td class="p-3 text-sky-500 whitespace-nowrap">{% if v.solved_x is not none %}x = {{ v.solved_x }}{% else %}<span class="text-zinc-500">без *</span>{% endif %}</td>
                                 <td class="p-3 text-zinc-200 whitespace-nowrap">{{ v.sent_count }} акк.</td>
                                 <td class="p-3">
@@ -1930,7 +2152,15 @@
                                     <span class="text-[11px] text-zinc-500">{{ v.bot_reply_preview or 'Отправлен' }}</span>
                                     {% endif %}
                                 </td>
-                                <td class="p-3 text-right text-theme-accent font-semibold whitespace-nowrap">{{ v.elapsed_ms }} ms</td>
+                                <td class="p-3 text-right font-semibold whitespace-nowrap">
+                                    <div class="text-theme-accent">{{ v.elapsed_ms }} ms <span class="text-[10px] text-zinc-500 font-normal">залп</span></div>
+                                    {% if v.ocr_time_ms %}
+                                    <div class="text-[10px] text-sky-400 font-normal inline-flex items-center gap-1 justify-end">
+                                        <span>⚡ чтение:</span>
+                                        <b class="text-cyan-300 font-mono">{{ v.ocr_time_ms }} ms</b>
+                                    </div>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -2362,7 +2592,7 @@
     <footer class="border-t border-zinc-800/80 py-4 text-xs text-zinc-500 mt-auto" style="background: var(--bg-glass);">
         <div class="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
             <div>
-                <span class="font-bold text-zinc-300">FarmBot Sniper PRO v3.9 by wcatox</span>
+                <span class="font-bold text-zinc-300">FarmBot Sniper PRO v5.0 by wcatox</span>
             </div>
             <div class="font-mono text-[11px] text-zinc-400">
                 Хранилище данных: /root/farm_data
@@ -3648,6 +3878,9 @@
                         el.offsetHeight;
                         el.style.animation = 'pixelSpringIn 0.48s var(--spring-gentle) both';
                         btn.classList.add('active');
+                        try {
+                            btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                        } catch(e) {}
                     } else {
                         el.classList.add('hidden');
                         btn.classList.remove('active');
@@ -3772,13 +4005,67 @@
             }
         }
 
+        let testerActiveImageBase64 = null;
+
+        function handleTesterFileSelect(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            processTesterImageFile(file);
+        }
+
+        function processTesterImageFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                showToast('Выберите файл изображения (PNG, JPG, WEBP)');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                testerActiveImageBase64 = e.target.result;
+                const wrap = document.getElementById('tester-preview-wrap');
+                const img = document.getElementById('tester-img-preview');
+                if (img) img.src = testerActiveImageBase64;
+                if (wrap) wrap.classList.remove('hidden');
+                runVoucherTester();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearTesterPhoto() {
+            testerActiveImageBase64 = null;
+            const input = document.getElementById('tester-file-input');
+            if (input) input.value = '';
+            const wrap = document.getElementById('tester-preview-wrap');
+            if (wrap) wrap.classList.add('hidden');
+            const rowTime = document.getElementById('row-ocr-time');
+            if (rowTime) rowTime.classList.add('hidden');
+            const rowText = document.getElementById('row-ocr-text');
+            if (rowText) rowText.classList.add('hidden');
+        }
+
+        window.addEventListener('paste', (e) => {
+            const vTab = document.getElementById('tab-vouchers');
+            if (!vTab || vTab.classList.contains('hidden')) return;
+            const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+            if (!items) return;
+            for (let item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    processTesterImageFile(blob);
+                    showToast('Скриншот вставлен из буфера обмена!');
+                    break;
+                }
+            }
+        });
+
         function fillTesterSample() {
+            clearTesterPhoto();
             document.getElementById('tester-input').value =
                 "Раздача ваучера на баланс!\nКод: va78*1-k9m2-p0x4\nРешите уравнение для *: 4 * x - 3 = 25";
             runVoucherTester();
         }
 
         function fillTesterBotReplySample() {
+            clearTesterPhoto();
             document.getElementById('tester-input').value =
                 "✅ Ваучер успешно активирован! Вам начислено 25 ₽.\nВаш текущий баланс: 65 ₽";
             runVoucherTester();
@@ -3787,11 +4074,23 @@
         async function runVoucherTester() {
             const text = document.getElementById('tester-input').value;
             const box = document.getElementById('tester-result');
+            const rowOcrTime = document.getElementById('row-ocr-time');
+            const resOcrTime = document.getElementById('res-ocr-time');
+            const rowOcrText = document.getElementById('row-ocr-text');
+            const resOcrText = document.getElementById('res-ocr-text');
+
             try {
+                let payload = {};
+                if (testerActiveImageBase64) {
+                    payload.image_base64 = testerActiveImageBase64;
+                } else {
+                    payload.text = text;
+                }
+
                 const res = await fetch('/api/test-voucher', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({text})
+                    body: JSON.stringify(payload)
                 });
                 const data = await res.json();
                 box.classList.remove('hidden');
@@ -3799,6 +4098,22 @@
                 document.getElementById('res-raw').innerText = data.raw_code || 'Не найден';
                 document.getElementById('res-x').innerText = data.solved_x !== null ? data.solved_x : 'Нет уравнения';
                 document.getElementById('res-final').innerText = data.final_code || '—';
+
+                if (data.is_photo && data.ocr_time_ms !== null) {
+                    if (rowOcrTime) {
+                        rowOcrTime.classList.remove('hidden');
+                        rowOcrTime.classList.add('flex');
+                    }
+                    if (resOcrTime) resOcrTime.innerText = `${data.ocr_time_ms} мс (RapidOCR CPU)`;
+                    if (rowOcrText && data.ocr_text) {
+                        rowOcrText.classList.remove('hidden');
+                        rowOcrText.classList.add('flex');
+                        if (resOcrText) resOcrText.innerText = data.ocr_text;
+                    }
+                } else {
+                    if (rowOcrTime) rowOcrTime.classList.add('hidden');
+                    if (rowOcrText) rowOcrText.classList.add('hidden');
+                }
 
                 const statusMap = {
                     activated: 'Успешная активация ✓',
@@ -3817,7 +4132,11 @@
                     sumEl.innerText = `${addStr} / Баланс: ${balStr}`;
                 }
 
-                showToast(data.success ? `Код решен: ${data.final_code}` : `Статус ответа: ${statusMap[data.bot_reply_status] || 'проверено'}`);
+                if (data.is_photo) {
+                    showToast(data.success ? `🎯 Ваучер из фото: ${data.final_code} (${data.ocr_time_ms}мс)` : 'Ваучер на фото не найден');
+                } else {
+                    showToast(data.success ? `Код решен: ${data.final_code}` : `Статус ответа: ${statusMap[data.bot_reply_status] || 'проверено'}`);
+                }
             } catch (e) {
                 alert('Ошибка тестера: ' + e);
             }
@@ -3842,6 +4161,86 @@
         {% if linked_nodes %}
         setInterval(() => refreshNodesWatchdog(false), 15000);
         {% endif %}
+
+        // --- ПАСХАЛКА: МНОГОКРАТНЫЙ КЛИК НА ВЕРСИЮ 5.0 ---
+        let _easterEggClicks = 0;
+        let _easterEggTimer = null;
+        let _lastEasterEggOpenedAt = 0;
+        function triggerEasterEgg() {
+            _easterEggClicks++;
+            if (_easterEggTimer) clearTimeout(_easterEggTimer);
+            if (navigator.vibrate) {
+                try { navigator.vibrate(35); } catch(e) {}
+            }
+            const badges = document.querySelectorAll('.flame-badge-header, .flame-badge-wrap, #version-badge');
+            badges.forEach(b => {
+                b.style.transform = 'scale(0.85)';
+                setTimeout(() => { b.style.transform = ''; }, 120);
+            });
+
+            if (_easterEggClicks >= 5) {
+                _easterEggClicks = 0;
+                showEasterEggModal();
+            } else {
+                _easterEggTimer = setTimeout(() => { _easterEggClicks = 0; }, 2200);
+            }
+        }
+
+        function showEasterEggModal() {
+            const modal = document.getElementById('easter-egg-modal');
+            if (modal) {
+                _lastEasterEggOpenedAt = Date.now();
+                modal.classList.remove('hidden');
+                if (navigator.vibrate) {
+                    try { navigator.vibrate([60, 40, 60, 40, 100]); } catch(e) {}
+                }
+            }
+        }
+
+        function closeEasterEgg() {
+            // Закрывать строго по кнопке-крестику, игнорируя случайные дабл-клики
+            if (Date.now() - _lastEasterEggOpenedAt < 400) return;
+            const modal = document.getElementById('easter-egg-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
     </script>
+
+    <!-- ПАСХАЛКА: МОДАЛЬНОЕ ОКНО ПРИ МНОГОКРАТНОМ КЛИКЕ НА ВЕРСИЮ 5.0 -->
+    <!-- Закрывается ТОЛЬКО по крестику в верхнем углу (клик в пустоту НЕ закрывает) -->
+    <div id="easter-egg-modal" class="hidden fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md transition-opacity duration-300 select-none">
+        <div class="relative max-w-lg w-full card-surface rounded-3xl p-5 sm:p-6 border border-theme-accent/50 shadow-2xl overflow-hidden text-center" style="box-shadow: 0 0 55px -5px var(--flame-glow, rgba(16, 185, 129, 0.7)); animation: pixelSpringIn 0.45s var(--spring-gentle) both;">
+            <!-- Кнопка-крестик закрытия (ТОЛЬКО ОНА ЗАКРЫВАЕТ ОКНО) -->
+            <button type="button" onclick="closeEasterEgg()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer z-10" title="Закрыть">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+
+            <!-- Заголовок пасхалки -->
+            <div class="flex items-center justify-center gap-2 mb-1.5">
+                <span class="text-2xl animate-bounce">🔥</span>
+                <h3 class="text-base sm:text-lg font-black uppercase tracking-wider text-white">Саня Одобрил!</h3>
+                <span class="text-2xl animate-bounce">🔥</span>
+            </div>
+            <p class="text-xs text-zinc-400 mb-4">Секретная пасхалка версии 5.0 активирована</p>
+
+            <!-- Контейнер изображения Сани -->
+            <div class="relative rounded-2xl overflow-hidden border border-white/10 bg-black/50 flex items-center justify-center max-h-[60vh] mb-5 group">
+                <img id="easter-egg-img"
+                     src="https://iili.io/nO1Fuzg.png"
+                     onerror="this.onerror=null; this.src='/static/img/sanya_ok.webp';"
+                     alt="Саня Ок"
+                     class="w-full h-auto max-h-[55vh] object-contain rounded-2xl transition-transform duration-300 group-hover:scale-[1.02]">
+            </div>
+
+            <!-- Единственная кнопка: Открыть оригинал фото по ссылке -->
+            <div class="flex items-center justify-center">
+                <a href="https://iili.io/nO1Fuzg.png" target="_blank" rel="noopener noreferrer" class="btn-primary w-full max-w-xs py-2.5 px-5 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:scale-[1.02] active:scale-95 transition-all">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    <span>Открыть оригинал фото</span>
+                </a>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

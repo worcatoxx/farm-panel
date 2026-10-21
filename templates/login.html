@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Вход в систему — FarmBot Sniper PRO</title>
+    <title>Вход в систему — FarmBot Sniper PRO v5.0</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/svg+xml" href="/app-icon.svg">
     <link rel="apple-touch-icon" href="/app-icon.svg">
@@ -14,7 +14,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
@@ -24,208 +24,565 @@
             --bg-card: #111115;
             --bg-card-hover: #18181f;
             --bg-sub: #09090b;
-            --bg-glass: rgba(9, 9, 11, 0.85);
+            --bg-glass: rgba(17, 17, 21, 0.88);
             --text-main: #f4f4f5;
             --text-muted: #a1a1aa;
             --border: #27272a;
             --accent: #7c3aed;
             --accent-hover: #8b5cf6;
-            --accent-glow: rgba(124, 58, 237, 0.28);
+            --accent-glow: rgba(124, 58, 237, 0.35);
+
+            /* Огненная палитра (Аметистовое пламя) */
+            --flame-core: #ffffff;
+            --flame-mid: #c084fc;
+            --flame-outer: #9333ea;
+            --flame-deep: #581c87;
+            --flame-glow: rgba(168, 85, 247, 0.65);
         }
         [data-theme="amoled-blue"] {
             --bg-main: #000000;
             --bg-card: #090A0F;
             --bg-card-hover: #121521;
             --bg-sub: #050608;
-            --bg-glass: rgba(9, 10, 15, 0.85);
+            --bg-glass: rgba(9, 10, 15, 0.88);
             --text-main: #FFFFFF;
             --text-muted: #7E8B9B;
             --border: #1A2035;
             --accent: #2563EB;
             --accent-hover: #3B82F6;
-            --accent-glow: rgba(37, 99, 235, 0.3);
+            --accent-glow: rgba(37, 99, 235, 0.4);
+
+            /* Огненная палитра (Сапфировое пламя) */
+            --flame-core: #ffffff;
+            --flame-mid: #60a5fa;
+            --flame-outer: #2563eb;
+            --flame-deep: #1e3a8a;
+            --flame-glow: rgba(59, 130, 246, 0.65);
         }
         [data-theme="dark-blue"] {
             --bg-main: #0B0F17;
             --bg-card: #131B2E;
             --bg-card-hover: #1B2640;
             --bg-sub: #0E1422;
-            --bg-glass: rgba(19, 27, 46, 0.85);
+            --bg-glass: rgba(19, 27, 46, 0.88);
             --text-main: #F1F5F9;
             --text-muted: #94A3B8;
             --border: #233252;
             --accent: #38BDF8;
             --accent-hover: #7DD3FC;
-            --accent-glow: rgba(56, 189, 248, 0.25);
+            --accent-glow: rgba(56, 189, 248, 0.35);
+
+            /* Огненная палитра (Кобальтовый огонь) */
+            --flame-core: #ffffff;
+            --flame-mid: #38bdf8;
+            --flame-outer: #0284c7;
+            --flame-deep: #075985;
+            --flame-glow: rgba(56, 189, 248, 0.65);
         }
         [data-theme="full-blue"] {
             --bg-main: #04152D;
             --bg-card: #072247;
             --bg-card-hover: #0B2E5E;
             --bg-sub: #051B38;
-            --bg-glass: rgba(7, 34, 71, 0.85);
+            --bg-glass: rgba(7, 34, 71, 0.88);
             --text-main: #E2F1FF;
             --text-muted: #7FA6CC;
             --border: #123E7A;
             --accent: #00F2FE;
             --accent-hover: #4FACFE;
-            --accent-glow: rgba(0, 242, 254, 0.25);
+            --accent-glow: rgba(0, 242, 254, 0.4);
+
+            /* Огненная палитра (Плазменная вспышка) */
+            --flame-core: #ffffff;
+            --flame-mid: #00f2fe;
+            --flame-outer: #0099ff;
+            --flame-deep: #0044aa;
+            --flame-glow: rgba(0, 242, 254, 0.7);
         }
         [data-theme="amoled-emerald"] {
             --bg-main: #000000;
             --bg-card: #070D0A;
             --bg-card-hover: #0E1A14;
             --bg-sub: #040806;
-            --bg-glass: rgba(7, 13, 10, 0.85);
+            --bg-glass: rgba(7, 13, 10, 0.88);
             --text-main: #ECFDF5;
             --text-muted: #6EE7B7;
             --border: #143325;
             --accent: #10B981;
             --accent-hover: #34D399;
-            --accent-glow: rgba(16, 185, 129, 0.25);
+            --accent-glow: rgba(16, 185, 129, 0.35);
+
+            /* Огненная палитра (Изумрудный огонь) */
+            --flame-core: #ffffff;
+            --flame-mid: #34d399;
+            --flame-outer: #10b981;
+            --flame-deep: #064e3b;
+            --flame-glow: rgba(16, 185, 129, 0.65);
         }
         [data-theme="sunset-dark"] {
             --bg-main: #0F0A0C;
             --bg-card: #1A1115;
             --bg-card-hover: #26181F;
             --bg-sub: #120C0E;
-            --bg-glass: rgba(26, 17, 21, 0.85);
+            --bg-glass: rgba(26, 17, 21, 0.88);
             --text-main: #FFF5F5;
             --text-muted: #A3858E;
             --border: #331F28;
             --accent: #F97316;
             --accent-hover: #FB923C;
-            --accent-glow: rgba(249, 115, 22, 0.25);
+            --accent-glow: rgba(249, 115, 22, 0.4);
+
+            /* Огненная палитра (Адское пламя / Лава) */
+            --flame-core: #fffbeb;
+            --flame-mid: #fbbf24;
+            --flame-outer: #f97316;
+            --flame-deep: #dc2626;
+            --flame-glow: rgba(249, 115, 22, 0.75);
         }
         [data-theme="light-tech"] {
             --bg-main: #F8FAFC;
             --bg-card: #FFFFFF;
             --bg-card-hover: #F1F5F9;
             --bg-sub: #F1F5F9;
-            --bg-glass: rgba(255, 255, 255, 0.88);
+            --bg-glass: rgba(255, 255, 255, 0.92);
             --text-main: #0F172A;
             --text-muted: #64748B;
             --border: #E2E8F0;
             --accent: #2563EB;
             --accent-hover: #1D4ED8;
-            --accent-glow: rgba(37, 99, 235, 0.15);
+            --accent-glow: rgba(37, 99, 235, 0.2);
+
+            --flame-core: #ffffff;
+            --flame-mid: #60a5fa;
+            --flame-outer: #2563eb;
+            --flame-deep: #1e40af;
+            --flame-glow: rgba(37, 99, 235, 0.45);
         }
         [data-theme="warm-craft"] {
             --bg-main: #EAE6DF;
             --bg-card: #F4F1EA;
             --bg-card-hover: #FAF8F5;
             --bg-sub: #E4DFD7;
-            --bg-glass: rgba(244, 241, 234, 0.88);
+            --bg-glass: rgba(244, 241, 234, 0.92);
             --text-main: #1C1B18;
             --text-muted: #78736A;
             --border: #D6D0C4;
             --accent: #FF4F00;
             --accent-hover: #E04600;
-            --accent-glow: rgba(255, 79, 0, 0.15);
-        }
+            --accent-glow: rgba(255, 79, 0, 0.25);
 
-        @keyframes pixelSpringIn {
-            0% { opacity: 0; transform: translateY(24px) scale(0.94); }
-            65% { opacity: 1; transform: translateY(-3px) scale(1.015); }
-            100% { opacity: 1; transform: translateY(0) scale(1); }
+            --flame-core: #ffffff;
+            --flame-mid: #fb923c;
+            --flame-outer: #ff4f00;
+            --flame-deep: #c2410c;
+            --flame-glow: rgba(255, 79, 0, 0.55);
         }
 
         * { box-sizing: border-box; }
+
         body {
             margin: 0;
             background-color: var(--bg-main);
-            background-image: radial-gradient(700px circle at 50% 0%, var(--accent-glow), transparent 70%);
-            background-attachment: fixed;
             color: var(--text-main);
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            transition: background-color 0.35s ease, color 0.35s ease;
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: background-color 0.4s ease, color 0.4s ease;
         }
+
+        /* Фоновые неоновые аврора-сферы */
+        .aurora-bg {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 0;
+        }
+        .aurora-orb {
+            position: absolute;
+            border-radius: 9999px;
+            filter: blur(100px);
+            opacity: 0.45;
+            transition: background 0.5s ease;
+            animation: auroraFloat 12s ease-in-out infinite alternate;
+        }
+        .orb-1 {
+            width: 520px;
+            height: 520px;
+            top: -120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: radial-gradient(circle, var(--flame-glow) 0%, transparent 70%);
+        }
+        .orb-2 {
+            width: 400px;
+            height: 400px;
+            bottom: -80px;
+            right: 10%;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            animation-duration: 15s;
+            animation-delay: -5s;
+        }
+        @keyframes auroraFloat {
+            0% { transform: translate(-50%, 0) scale(1); }
+            50% { transform: translate(-45%, 40px) scale(1.12); }
+            100% { transform: translate(-55%, -20px) scale(0.95); }
+        }
+
+        /* Холст летающих огненных искр */
+        #sparks-canvas {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 3D Вход Карточки */
+        @keyframes mega3DEntrance {
+            0% {
+                opacity: 0;
+                transform: perspective(1200px) rotateX(16deg) translateY(60px) scale(0.88);
+                filter: blur(10px);
+            }
+            60% {
+                opacity: 1;
+                transform: perspective(1200px) rotateX(-4deg) translateY(-8px) scale(1.02);
+                filter: blur(0px);
+            }
+            85% {
+                transform: perspective(1200px) rotateX(1.5deg) translateY(2px) scale(0.995);
+            }
+            100% {
+                opacity: 1;
+                transform: perspective(1200px) rotateX(0deg) translateY(0) scale(1);
+            }
+        }
+
+        .login-card-wrap {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 440px;
+            padding: 16px;
+        }
+
         .login-card {
-            background: var(--bg-card);
+            position: relative;
+            background: var(--bg-glass);
             border: 1px solid var(--border);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(20px);
-            animation: pixelSpringIn 0.55s var(--spring-gentle) both;
+            border-radius: 28px;
+            box-shadow: 
+                0 30px 60px -15px rgba(0, 0, 0, 0.65),
+                0 0 40px -10px var(--flame-glow);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            animation: mega3DEntrance 0.85s var(--spring-bounce) both;
+            overflow: hidden;
+            transition: border-color 0.4s ease, box-shadow 0.4s ease;
         }
-        .input-field {
+
+        /* Анимированная неоновая рамка карточки */
+        .card-border-glow {
+            position: absolute;
+            inset: 0;
+            border-radius: 28px;
+            padding: 1px;
+            background: linear-gradient(135deg, 
+                var(--flame-mid) 0%, 
+                transparent 45%, 
+                var(--accent) 70%, 
+                transparent 100%
+            );
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* ОГНЕННЫЙ БЕЙДЖ: ВЕРСИЯ 5 (BURNING FLAME BADGE) */
+        .flame-badge-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 7px 18px;
+            border-radius: 9999px;
+            background: radial-gradient(ellipse at bottom, rgba(0,0,0,0.7) 0%, var(--bg-sub) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 
+                0 0 25px 2px var(--flame-glow),
+                inset 0 -6px 14px -2px var(--flame-deep),
+                inset 0 1px 2px rgba(255, 255, 255, 0.25);
+            overflow: visible;
+            margin-bottom: 12px;
+        }
+
+        /* Анимированная аура пламени позади бейджа */
+        .flame-aura {
+            position: absolute;
+            inset: -4px;
+            border-radius: 9999px;
+            background: radial-gradient(circle, var(--flame-glow) 20%, transparent 75%);
+            filter: blur(8px);
+            opacity: 0.85;
+            animation: flameAuraPulse 2s ease-in-out infinite alternate;
+            z-index: -1;
+        }
+
+        @keyframes flameAuraPulse {
+            0% { transform: scale(0.96); opacity: 0.6; }
+            50% { transform: scale(1.08) translateY(-2px); opacity: 0.95; }
+            100% { transform: scale(1.02); opacity: 0.75; }
+        }
+
+        /* Горящий текст "VERSION 5.0" */
+        .burning-fire-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 900;
+            font-size: 13px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, 
+                var(--flame-core) 0%, 
+                var(--flame-mid) 40%, 
+                var(--flame-outer) 75%, 
+                var(--flame-deep) 100%
+            );
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: 
+                drop-shadow(0 -1px 2px var(--flame-core))
+                drop-shadow(0 -2px 6px var(--flame-mid))
+                drop-shadow(0 -5px 12px var(--flame-outer))
+                drop-shadow(0 -8px 20px var(--flame-deep));
+            animation: flameFlicker 1.8s ease-in-out infinite alternate;
+            display: inline-block;
+        }
+
+        @keyframes flameFlicker {
+            0% {
+                filter: 
+                    drop-shadow(0 -1px 2px var(--flame-core))
+                    drop-shadow(0 -2px 5px var(--flame-mid))
+                    drop-shadow(0 -5px 10px var(--flame-outer))
+                    drop-shadow(0 -8px 18px var(--flame-deep));
+                transform: translateY(0) scale(1);
+            }
+            35% {
+                filter: 
+                    drop-shadow(0 -1px 3px var(--flame-core))
+                    drop-shadow(0 -4px 10px var(--flame-mid))
+                    drop-shadow(0 -7px 18px var(--flame-outer))
+                    drop-shadow(0 -12px 28px var(--flame-deep));
+                transform: translateY(-0.8px) scale(1.02);
+            }
+            70% {
+                filter: 
+                    drop-shadow(0 -1px 2px var(--flame-core))
+                    drop-shadow(0 -3px 7px var(--flame-mid))
+                    drop-shadow(0 -6px 14px var(--flame-outer))
+                    drop-shadow(0 -10px 22px var(--flame-deep));
+                transform: translateY(0.4px) scale(0.99);
+            }
+            100% {
+                filter: 
+                    drop-shadow(0 -2px 4px var(--flame-core))
+                    drop-shadow(0 -5px 12px var(--flame-mid))
+                    drop-shadow(0 -9px 20px var(--flame-outer))
+                    drop-shadow(0 -14px 32px var(--flame-deep));
+                transform: translateY(-1.2px) scale(1.025);
+            }
+        }
+
+        /* Анимированная иконка огня */
+        .flame-icon-svg {
+            width: 17px;
+            height: 17px;
+            filter: drop-shadow(0 0 6px var(--flame-mid)) drop-shadow(0 0 12px var(--flame-outer));
+            animation: flameWiggle 1.5s ease-in-out infinite alternate;
+        }
+        @keyframes flameWiggle {
+            0% { transform: rotate(-5deg) scale(0.95); }
+            50% { transform: rotate(6deg) scale(1.12) translateY(-1px); }
+            100% { transform: rotate(-2deg) scale(1.04); }
+        }
+
+        /* Инпуты с неоновым фокусом */
+        .login-input {
             background-color: var(--bg-sub) !important;
             border: 1px solid var(--border) !important;
             color: var(--text-main) !important;
             transition: all 0.28s var(--spring-gentle);
         }
-        .input-field:focus {
-            border-color: var(--accent) !important;
-            box-shadow: 0 0 0 4px var(--accent-glow) !important;
-            transform: translateY(-1px);
+        .login-input:focus {
+            border-color: var(--flame-mid) !important;
+            box-shadow: 0 0 0 4px var(--flame-glow), 0 0 20px -4px var(--flame-glow) !important;
+            transform: translateY(-2px);
         }
-        .btn-primary {
-            background: var(--accent) !important;
+
+        /* Главная кнопка с огненным блеском */
+        .btn-fire-login {
+            position: relative;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%) !important;
             color: #ffffff !important;
-            border: 1px solid rgba(255, 255, 255, 0.14) !important;
-            box-shadow: 0 8px 20px -4px var(--accent-glow);
-            transition: transform 0.4s var(--spring-bounce), background-color 0.2s ease, box-shadow 0.25s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 10px 25px -5px var(--accent-glow), 0 0 15px -2px var(--flame-glow);
+            transition: transform 0.4s var(--spring-bounce), box-shadow 0.3s ease, filter 0.3s ease;
+            overflow: hidden;
         }
-        .btn-primary:hover {
-            background: var(--accent-hover) !important;
+        .btn-fire-login::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                60deg,
+                transparent 30%,
+                rgba(255, 255, 255, 0.25) 50%,
+                transparent 70%
+            );
+            transform: rotate(30deg) translateY(-100%);
+            transition: transform 0.7s ease;
+            pointer-events: none;
+        }
+        .btn-fire-login:hover {
             transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 14px 32px -4px var(--accent-glow), 0 0 25px 2px var(--flame-glow);
+            filter: brightness(1.08);
         }
-        .btn-primary:active {
-            transform: scale(0.94);
+        .btn-fire-login:hover::after {
+            transform: rotate(30deg) translateY(100%);
+        }
+        .btn-fire-login:active {
+            transform: scale(0.95);
+        }
+
+        /* Переключатель тем */
+        .theme-pill-bar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            animation: mega3DEntrance 0.6s var(--spring-gentle) both;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
         }
         .theme-dot-btn {
-            width: 24px;
-            height: 24px;
+            width: 22px;
+            height: 22px;
             border-radius: 999px;
             border: 2px solid var(--border);
             cursor: pointer;
-            transition: transform 0.4s var(--spring-bounce), border-radius 0.35s var(--spring-bounce), border-color 0.2s ease;
+            transition: transform 0.4s var(--spring-bounce), border-radius 0.35s var(--spring-bounce), border-color 0.2s ease, box-shadow 0.25s ease;
         }
         .theme-dot-btn:hover {
-            transform: scale(1.15);
-        }
-        .theme-dot-btn:active {
-            transform: scale(0.88);
+            transform: scale(1.25);
+            box-shadow: 0 0 10px var(--accent-glow);
         }
         .theme-dot-btn.active {
-            transform: scale(1.22);
-            border-radius: 9px;
+            transform: scale(1.28);
+            border-radius: 8px;
             border-color: var(--text-main);
+            box-shadow: 0 0 12px var(--flame-glow);
+        }
+
+        /* Огненный логотип */
+        .logo-fire-box {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--flame-outer) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 30px -4px var(--flame-glow);
+            transition: transform 0.4s var(--spring-bounce), box-shadow 0.4s ease;
+        }
+        .logo-fire-box:hover {
+            transform: scale(1.1) rotate(4deg);
+            box-shadow: 0 14px 40px 0 var(--flame-glow);
+        }
+
+        /* Анимация ошибки */
+        @keyframes shakeError {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+        .error-shake {
+            animation: shakeError 0.5s ease-in-out both;
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-4 antialiased">
+<body class="p-4 antialiased">
 
-    <div class="w-full max-w-md">
-        <!-- Компактный переключатель тем на странице входа -->
-        <div class="flex items-center justify-center gap-2 mb-4 py-2 px-3 rounded-full" style="background: var(--bg-card); border: 1px solid var(--border); animation: pixelSpringIn 0.45s var(--spring-gentle) both;">
-            <span class="text-[11px] font-medium mr-1" style="color: var(--text-muted);">Тема:</span>
-            <button type="button" onclick="applyTheme('default-violet')" data-t="default-violet" class="theme-dot-btn" style="background:#7c3aed;" title="Фирменная PRO"></button>
-            <button type="button" onclick="applyTheme('amoled-blue')" data-t="amoled-blue" class="theme-dot-btn" style="background:#2563EB;" title="AMOLED Синий"></button>
-            <button type="button" onclick="applyTheme('dark-blue')" data-t="dark-blue" class="theme-dot-btn" style="background:#38BDF8;" title="Тёмный Кобальт"></button>
-            <button type="button" onclick="applyTheme('full-blue')" data-t="full-blue" class="theme-dot-btn" style="background:#00F2FE;" title="Глубокий Синий"></button>
-            <button type="button" onclick="applyTheme('amoled-emerald')" data-t="amoled-emerald" class="theme-dot-btn" style="background:#10B981;" title="AMOLED Изумруд"></button>
-            <button type="button" onclick="applyTheme('sunset-dark')" data-t="sunset-dark" class="theme-dot-btn" style="background:#F97316;" title="Ночной Закат"></button>
+    <!-- Динамические аврора-сферы -->
+    <div class="aurora-bg">
+        <div class="aurora-orb orb-1"></div>
+        <div class="aurora-orb orb-2"></div>
+    </div>
+
+    <!-- Холст летающих огненных частиц-искр -->
+    <canvas id="sparks-canvas"></canvas>
+
+    <div class="login-card-wrap">
+
+        <!-- Компактный переключатель тем с поддержкой всех 8 стилей -->
+        <div class="theme-pill-bar flex items-center justify-center gap-2 mb-4 py-2 px-3.5 rounded-full backdrop-blur-md">
+            <span class="text-[11px] font-semibold uppercase tracking-wider mr-1" style="color: var(--text-muted);">Стиль:</span>
+            <button type="button" onclick="applyTheme('default-violet')" data-t="default-violet" class="theme-dot-btn" style="background:#7c3aed;" title="Фирменная PRO (Аметистовый огонь)"></button>
+            <button type="button" onclick="applyTheme('amoled-blue')" data-t="amoled-blue" class="theme-dot-btn" style="background:#2563EB;" title="AMOLED Синий (Сапфировый огонь)"></button>
+            <button type="button" onclick="applyTheme('dark-blue')" data-t="dark-blue" class="theme-dot-btn" style="background:#38BDF8;" title="Тёмный Кобальт (Кобальтовый огонь)"></button>
+            <button type="button" onclick="applyTheme('full-blue')" data-t="full-blue" class="theme-dot-btn" style="background:#00F2FE;" title="Глубокий Синий (Плазменная вспышка)"></button>
+            <button type="button" onclick="applyTheme('amoled-emerald')" data-t="amoled-emerald" class="theme-dot-btn" style="background:#10B981;" title="AMOLED Изумруд (Изумрудный огонь)"></button>
+            <button type="button" onclick="applyTheme('sunset-dark')" data-t="sunset-dark" class="theme-dot-btn" style="background:#F97316;" title="Ночной Закат (Адское пламя)"></button>
             <button type="button" onclick="applyTheme('light-tech')" data-t="light-tech" class="theme-dot-btn" style="background:#F8FAFC; border-color:#94A3B8;" title="Светлая Техно"></button>
-            <button type="button" onclick="applyTheme('warm-craft')" data-t="warm-craft" class="theme-dot-btn" style="background:#EAE6DF; border-color:#FF4F00;" title="Песочная"></button>
+            <button type="button" onclick="applyTheme('warm-craft')" data-t="warm-craft" class="theme-dot-btn" style="background:#FF4F00; border-color:#D6D0C4;" title="Песочная (Вулкан)"></button>
         </div>
 
-        <div class="login-card p-8 sm:p-9 rounded-3xl relative overflow-hidden">
-            <div class="text-center mb-7">
-                <div class="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center text-white shadow-lg transition-transform duration-300 hover:scale-110 hover:rotate-3" style="background: var(--accent); box-shadow: 0 10px 25px -5px var(--accent-glow);">
-                    <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+        <div class="login-card p-7 sm:p-9">
+            <div class="card-border-glow"></div>
+
+            <div class="text-center mb-6 relative">
+                <!-- Огненная эмблема-логотип -->
+                <div class="logo-fire-box mx-auto mb-3.5 cursor-pointer">
+                    <svg class="w-7 h-7 text-white drop-shadow-md" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
                 </div>
-                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-mono font-medium mb-2.5" style="background: var(--bg-sub); border: 1px solid var(--border); color: var(--accent);">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    FARMBOT SNIPER PRO v3.9
+
+                <!-- ГОРЯЩИЙ ОГНЕМ БЕЙДЖ: ВЕРСИЯ 5 -->
+                <div>
+                    <div class="flame-badge-wrap cursor-pointer select-none active:scale-90 transition-transform" id="version-badge" onclick="triggerEasterEgg()" title="🔥 VERSION 5.0 🔥 (Кликни 5 раз подряд!)">
+                        <div class="flame-aura"></div>
+                        <svg class="flame-icon-svg" viewBox="0 0 24 24" fill="url(#flameGrad)">
+                            <defs>
+                                <linearGradient id="flameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+                                    <stop offset="0%" stop-color="var(--flame-deep)" />
+                                    <stop offset="50%" stop-color="var(--flame-outer)" />
+                                    <stop offset="85%" stop-color="var(--flame-mid)" />
+                                    <stop offset="100%" stop-color="var(--flame-core)" />
+                                </linearGradient>
+                            </defs>
+                            <path d="M12 23c-4.97 0-9-3.8-9-8.5C3 8.7 8.5 2 12 1c1.5 2.5 4 6.5 4 9.5 0 .5-.1 1-.2 1.5 1.2-1.3 1.8-2.7 2-3.8 2.2 2.6 3.2 5.5 3.2 8.3 0 4.7-4.03 8.5-9 8.5zm-.5-5.5c2.48 0 4.5-1.79 4.5-4 0-1.8-1.5-4-3-5.5-.8 1.3-1.5 2.5-1.5 4 0 .3.1.6.2.9-.6-.6-1-1.3-1.2-2-1 1.4-1.5 3.1-1.5 4.6 0 1.1.4 2 1.1 2.7.4.2.9.3 1.4.3z"/>
+                        </svg>
+                        <span class="burning-fire-text">🔥 VERSION 5.0 🔥</span>
+                    </div>
                 </div>
-                <h1 class="text-xl font-bold tracking-tight">Вход в панель управления</h1>
-                <p class="text-xs mt-1" style="color: var(--text-muted);">Автоматизированная система перехвата и вывода ваучеров</p>
+
+                <h1 class="text-xl font-extrabold tracking-tight">Вход в панель управления</h1>
+                <p class="text-xs mt-1" style="color: var(--text-muted);">Автоматизированный перехват ваучеров с RapidOCR ONNX</p>
             </div>
 
             {% if error %}
-            <div class="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-2xl text-xs mb-5 flex items-center gap-2.5">
+            <div class="error-shake bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-2xl text-xs mb-5 flex items-center gap-2.5 shadow-lg">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
@@ -233,49 +590,53 @@
             </div>
             {% endif %}
 
-            <form method="post" class="flex flex-col gap-4">
+            <form id="login-form" method="post" onsubmit="handleFormSubmit(event)" class="flex flex-col gap-4">
                 <div>
-                    <label class="text-xs font-medium block mb-1.5" style="color: var(--text-muted);">Логин администратора</label>
+                    <label class="text-xs font-semibold block mb-1.5" style="color: var(--text-muted);">Логин администратора</label>
                     <div class="relative">
-                        <span class="absolute left-3.5 top-1/2 -translate-y-1/2" style="color: var(--text-muted);">
+                        <span class="absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors" style="color: var(--text-muted);">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                             </svg>
                         </span>
-                        <input name="username" placeholder="admin" required autofocus class="input-field w-full rounded-2xl pl-10 pr-4 py-3 text-xs outline-none">
+                        <input name="username" placeholder="admin" required autofocus class="login-input w-full rounded-2xl pl-10 pr-4 py-3 text-xs outline-none font-medium">
                     </div>
                 </div>
+
                 <div>
-                    <label class="text-xs font-medium block mb-1.5" style="color: var(--text-muted);">Пароль доступа</label>
+                    <label class="text-xs font-semibold block mb-1.5" style="color: var(--text-muted);">Пароль доступа</label>
                     <div class="relative">
-                        <span class="absolute left-3.5 top-1/2 -translate-y-1/2" style="color: var(--text-muted);">
+                        <span class="absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors" style="color: var(--text-muted);">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                             </svg>
                         </span>
-                        <input id="login-pwd" name="password" type="password" placeholder="••••••••" required class="input-field w-full rounded-2xl pl-10 pr-10 py-3 text-xs outline-none">
-                        <button type="button" onclick="toggleLoginPwd()" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition" style="color: var(--text-muted);" title="Показать/скрыть пароль">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <input id="login-pwd" name="password" type="password" placeholder="••••••••" required class="login-input w-full rounded-2xl pl-10 pr-10 py-3 text-xs outline-none font-medium">
+                        <button type="button" onclick="toggleLoginPwd()" class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:text-white transition rounded-lg" style="color: var(--text-muted);" title="Показать/скрыть пароль">
+                            <svg id="eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                             </svg>
                         </button>
                     </div>
                 </div>
-                <button type="submit" class="btn-primary mt-2 w-full py-3.5 rounded-2xl font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer">
-                    <span>Войти в панель</span>
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+
+                <button id="submit-btn" type="submit" class="btn-fire-login mt-2 w-full py-3.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer">
+                    <span id="btn-text">Войти в панель</span>
+                    <svg id="btn-arrow" class="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                    </svg>
+                    <svg id="btn-spinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                 </button>
             </form>
 
-            <div class="mt-7 pt-4 flex items-center justify-between text-[11px] font-mono" style="border-top: 1px solid var(--border); color: var(--text-muted);">
-                <span>FarmBot Sniper PRO v3.9 by wcatox</span>
-                <span class="flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                    </svg>
+            <div class="mt-6 pt-4 flex items-center justify-between text-[11px] font-mono" style="border-top: 1px solid var(--border); color: var(--text-muted);">
+                <span>FarmBot Sniper PRO v5.0 by wcatox</span>
+                <span class="flex items-center gap-1.5 font-semibold text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     Защищено
                 </span>
             </div>
@@ -283,11 +644,34 @@
     </div>
 
     <script>
+        // Переключение видимости пароля
         function toggleLoginPwd() {
             const p = document.getElementById('login-pwd');
-            p.type = p.type === 'password' ? 'text' : 'password';
+            const eye = document.getElementById('eye-icon');
+            if (p.type === 'password') {
+                p.type = 'text';
+                eye.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/>';
+            } else {
+                p.type = 'password';
+                eye.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>';
+            }
         }
 
+        // Анимация отправки формы входа
+        function handleFormSubmit(e) {
+            const btn = document.getElementById('submit-btn');
+            const text = document.getElementById('btn-text');
+            const arrow = document.getElementById('btn-arrow');
+            const spinner = document.getElementById('btn-spinner');
+
+            text.innerText = 'Авторизация в системе...';
+            arrow.classList.add('hidden');
+            spinner.classList.remove('hidden');
+            btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.9';
+        }
+
+        // Применение и сохранение тем
         function applyTheme(theme) {
             if (theme === 'default-violet') {
                 document.documentElement.removeAttribute('data-theme');
@@ -298,6 +682,12 @@
             document.querySelectorAll('.theme-dot-btn').forEach(b => {
                 b.classList.toggle('active', b.getAttribute('data-t') === theme);
             });
+            // Обновляем мета-тег для статус-бара
+            const metaTheme = document.getElementById('meta-theme-color');
+            if (metaTheme) {
+                const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-main').trim();
+                metaTheme.setAttribute('content', bg || '#09090b');
+            }
         }
 
         applyTheme(localStorage.getItem('farm_theme') || 'default-violet');
@@ -305,6 +695,153 @@
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').catch(() => {});
         }
+
+        // ХОЛСТ: Огненные искры / цифровые частицы (Sparks Particle Engine)
+        (function initSparks() {
+            const canvas = document.getElementById('sparks-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            let width = canvas.width = window.innerWidth;
+            let height = canvas.height = window.innerHeight;
+
+            window.addEventListener('resize', () => {
+                width = canvas.width = window.innerWidth;
+                height = canvas.height = window.innerHeight;
+            });
+
+            const particles = [];
+            const MAX_PARTICLES = 42;
+
+            function createSpark() {
+                const styles = getComputedStyle(document.documentElement);
+                const flameColor = styles.getPropertyValue('--flame-mid').trim() || '#c084fc';
+                return {
+                    x: Math.random() * width,
+                    y: height + Math.random() * 20,
+                    size: Math.random() * 2.5 + 1,
+                    speedY: Math.random() * 1.8 + 0.8,
+                    speedX: (Math.random() - 0.5) * 0.9,
+                    alpha: Math.random() * 0.7 + 0.3,
+                    fade: Math.random() * 0.008 + 0.004,
+                    color: flameColor
+                };
+            }
+
+            for (let i = 0; i < MAX_PARTICLES; i++) {
+                const p = createSpark();
+                p.y = Math.random() * height;
+                particles.push(p);
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, width, height);
+                const styles = getComputedStyle(document.documentElement);
+                const activeColor = styles.getPropertyValue('--flame-mid').trim() || '#c084fc';
+
+                for (let i = 0; i < particles.length; i++) {
+                    const p = particles[i];
+                    p.y -= p.speedY;
+                    p.x += p.speedX;
+                    p.alpha -= p.fade;
+
+                    if (p.alpha <= 0 || p.y < -10) {
+                        particles[i] = createSpark();
+                        continue;
+                    }
+
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = activeColor;
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = activeColor;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+                requestAnimationFrame(animate);
+            }
+            animate();
+        })();
+
+        // --- ПАСХАЛКА: МНОГОКРАТНЫЙ КЛИК НА ВЕРСИЮ 5.0 ---
+        let _easterEggClicks = 0;
+        let _easterEggTimer = null;
+        let _lastEasterEggOpenedAt = 0;
+        function triggerEasterEgg() {
+            _easterEggClicks++;
+            if (_easterEggTimer) clearTimeout(_easterEggTimer);
+            if (navigator.vibrate) {
+                try { navigator.vibrate(35); } catch(e) {}
+            }
+            const badges = document.querySelectorAll('.flame-badge-wrap, #version-badge');
+            badges.forEach(b => {
+                b.style.transform = 'scale(0.85)';
+                setTimeout(() => { b.style.transform = ''; }, 120);
+            });
+
+            if (_easterEggClicks >= 5) {
+                _easterEggClicks = 0;
+                showEasterEggModal();
+            } else {
+                _easterEggTimer = setTimeout(() => { _easterEggClicks = 0; }, 2200);
+            }
+        }
+
+        function showEasterEggModal() {
+            const modal = document.getElementById('easter-egg-modal');
+            if (modal) {
+                _lastEasterEggOpenedAt = Date.now();
+                modal.classList.remove('hidden');
+                if (navigator.vibrate) {
+                    try { navigator.vibrate([60, 40, 60, 40, 100]); } catch(e) {}
+                }
+            }
+        }
+
+        function closeEasterEgg() {
+            if (Date.now() - _lastEasterEggOpenedAt < 400) return;
+            const modal = document.getElementById('easter-egg-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
     </script>
+
+    <!-- ПАСХАЛКА: МОДАЛЬНОЕ ОКНО ПРИ МНОГОКРАТНОМ КЛИКЕ НА ВЕРСИЮ 5.0 -->
+    <!-- Закрывается ТОЛЬКО по крестику в верхнем углу (клик в пустоту НЕ закрывает) -->
+    <div id="easter-egg-modal" class="hidden fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md transition-opacity duration-300 select-none">
+        <div class="relative max-w-lg w-full card-surface rounded-3xl p-5 sm:p-6 border border-theme-accent/50 shadow-2xl overflow-hidden text-center" style="box-shadow: 0 0 55px -5px var(--flame-glow, rgba(16, 185, 129, 0.7)); animation: pixelSpringIn 0.45s var(--spring-gentle) both;">
+            <!-- Кнопка-крестик закрытия (ТОЛЬКО ОНА ЗАКРЫВАЕТ ОКНО) -->
+            <button type="button" onclick="closeEasterEgg()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer z-10" title="Закрыть">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+
+            <!-- Заголовок пасхалки -->
+            <div class="flex items-center justify-center gap-2 mb-1.5">
+                <span class="text-2xl animate-bounce">🔥</span>
+                <h3 class="text-base sm:text-lg font-black uppercase tracking-wider text-white">Саня Одобрил!</h3>
+                <span class="text-2xl animate-bounce">🔥</span>
+            </div>
+            <p class="text-xs text-zinc-400 mb-4">Секретная пасхалка версии 5.0 активирована</p>
+
+            <!-- Контейнер изображения Сани -->
+            <div class="relative rounded-2xl overflow-hidden border border-white/10 bg-black/50 flex items-center justify-center max-h-[60vh] mb-5 group">
+                <img id="easter-egg-img"
+                     src="https://iili.io/nO1Fuzg.png"
+                     onerror="this.onerror=null; this.src='/static/img/sanya_ok.webp';"
+                     alt="Саня Ок"
+                     class="w-full h-auto max-h-[55vh] object-contain rounded-2xl transition-transform duration-300 group-hover:scale-[1.02]">
+            </div>
+
+            <!-- Единственная кнопка: Открыть оригинал фото по ссылке -->
+            <div class="flex items-center justify-center">
+                <a href="https://iili.io/nO1Fuzg.png" target="_blank" rel="noopener noreferrer" class="btn-primary w-full max-w-xs py-2.5 px-5 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:scale-[1.02] active:scale-95 transition-all">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    <span>Открыть оригинал фото</span>
+                </a>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

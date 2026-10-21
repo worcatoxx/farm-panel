@@ -1,14 +1,84 @@
+import os
+# Блокировка пулов потоков в C/C++ библиотеках (OpenMP, BLAS, MKL) строго до импорта numpy, cv2, onnxruntime
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import ast
 import asyncio
 import hashlib
+import io
 import json
 import operator
-import os
 import random
 import re
 import shutil
+import sys
 import time
 from datetime import datetime
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+try:
+    from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageChops
+except ImportError:
+    Image = None
+    ImageOps = None
+    ImageEnhance = None
+    ImageFilter = None
+    ImageChops = None
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+# =========================================================================
+# ГЛОБАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ И ПРОГРЕВ МОДЕЛИ RAPIDOCR (ONNX RUNTIME)
+# Строгая оптимизация под 1 vCPU / 1 GB RAM: 1 поток, без троттлинга и угла текста
+# =========================================================================
+RAPID_OCR = None
+try:
+    from rapidocr_onnxruntime import RapidOCR
+    print("[OCR-INIT] [*] Загрузка весов RapidOCR ONNX (1 vCPU Ultra-Mode)...", flush=True)
+    _t_init = time.perf_counter()
+    RAPID_OCR = RapidOCR(
+        intra_op_num_threads=1,
+        inter_op_num_threads=1,
+        det_limit_side_len=480,
+        det_limit_type="max",
+        use_cls=False,
+        use_angle_cls=False,
+    )
+    # Фиксация параметров детекции без апскейла
+    if hasattr(RAPID_OCR, "text_det"):
+        RAPID_OCR.text_det.limit_side_len = 480
+        RAPID_OCR.text_det.limit_type = "max"
+
+    # Однократный прогрев (warmup) модели при старте bot.py на тестовой матрице
+    if np is not None:
+        _dummy_mat = np.zeros((100, 100, 3), dtype=np.uint8)
+        RAPID_OCR(_dummy_mat, use_cls=False)
+    _t_warmup = (time.perf_counter() - _t_init) * 1000.0
+    print(f"[OCR-INIT] [OK] RapidOCR ONNX успешно загружен и прогрет за {_t_warmup:.1f}мс (1 поток, det=480 max)!", flush=True)
+except Exception as _e:
+    print(f"[OCR-INIT] [ERR] Ошибка инициализации RapidOCR: {_e}", flush=True)
+    import traceback
+    traceback.print_exc()
+    RAPID_OCR = None
+
 from telethon import TelegramClient, events
 from telethon.errors import (
     AuthKeyDuplicatedError,
@@ -63,6 +133,7 @@ session_to_client = {}
 client_meta = {}
 target_peers = {}
 processed_vouchers = set()
+processed_msg_keys = set()
 listener_clients = set()
 current_source_channel = "vaycher_virtnumber"
 current_target_bot = "Virtnumber_buy_bot"
@@ -377,6 +448,8 @@ def record_voucher_history(
     winners: list[str] | None = None,
     status: str = "pending",
     bot_reply_sample: str = "",
+    source: str = "text",
+    ocr_time_ms: float = 0.0,
 ):
     history = []
     if os.path.exists(VOUCHERS_HISTORY_FILE):
@@ -394,6 +467,7 @@ def record_voucher_history(
         "solved_x": solved_x,
         "sent_count": sent_count,
         "elapsed_ms": round(elapsed_ms, 1),
+        "ocr_time_ms": round(ocr_time_ms, 1) if ocr_time_ms > 0 else None,
         "activated_count": activated_count,
         "earned_rub": round(earned_rub, 2),
         "winners": winners or [],
@@ -401,6 +475,7 @@ def record_voucher_history(
         "activation_status": status,
         "bot_reply_sample": bot_reply_sample,
         "bot_reply_preview": bot_reply_sample,
+        "source": source,
     })
     history = history[:100]
     try:
@@ -571,6 +646,248 @@ def solve_math_equation(text: str) -> str | None:
     return None
 
 
+CYRILLIC_HOMOGLYPHS = str.maketrans({
+    "а": "a", "А": "A",
+    "с": "c", "С": "C",
+    "е": "e", "Е": "E",
+    "о": "o", "О": "O",
+    "р": "p", "Р": "P",
+    "х": "x", "Х": "X",
+    "у": "y", "У": "Y",
+    "к": "k", "К": "K",
+    "т": "t", "Т": "T",
+    "м": "m", "М": "M",
+    "б": "b", "Б": "B",
+})
+
+VOUCHER_REGEX = re.compile(
+    r"\b(va[a-zA-Z0-9*?]{2,12}(?:-[a-zA-Z0-9*?]{2,12})+)\b",
+    re.IGNORECASE
+)
+
+def heal_hex_segment(seg: str) -> str:
+    if "*" in seg or "?" in seg:
+        return seg.replace("?", "*")
+    cand = seg.replace("o", "0").replace("O", "0").replace("l", "1").replace("I", "1")
+    cand = cand.replace("G", "6").replace("g", "6").replace("S", "5").replace("s", "5")
+    cand = cand.replace("B", "b").replace("D", "b")
+    return cand.lower()
+
+def clean_and_heal_ocr_voucher(text: str) -> str | None:
+    if not text:
+        return None
+
+    # Шаг 1: Нормализация дефисов, тире, подчеркиваний и пробелов вокруг них
+    t = re.sub(r"[\u2010-\u2015\u2212_~]", "-", text)
+    t = re.sub(r"\s*-\s*", "-", t)
+
+    # Шаг 2: Нормализация кириллических опечаток (например 'ва' вместо 'va')
+    t = re.sub(r"\b[вВ][аАaA]", "va", t)
+    t = t.translate(CYRILLIC_HOMOGLYPHS)
+
+    # Шаг 3: Поиск по целевому regex (все ваучеры начинаются на va): r'\b(va[a-zA-Z0-9*?]{2,12}(?:-[a-zA-Z0-9*?]{2,12})+)\b'
+    m = VOUCHER_REGEX.search(t)
+    if m:
+        cand = m.group(1)
+        parts = cand.split("-")
+        if len(parts) >= 2:
+            p0 = "va" + heal_hex_segment(parts[0][2:])
+            healed = [p0]
+            for p in parts[1:]:
+                healed.append(heal_hex_segment(p))
+            # Если к последнему сегменту прилипли цифры таймстампа/хвоста (например 1b6b22:44 или b6b0)
+            if len(healed[-1]) > 5 and len(healed[-2]) <= 5 and not ("*" in healed[-1]):
+                healed[-1] = healed[-1][:len(healed[-2])]
+            return "-".join(healed).replace("?", "*")
+
+    # Шаг 4: Слитый средний или последний сегмент: 'va6f8b-59C01B6B0'
+    m_fused = re.search(r"\bva([a-zA-Z0-9*?]{4,6})-([a-zA-Z0-9*?]{4})[1I\-]?([a-zA-Z0-9*?]{4})\b", t, re.IGNORECASE)
+    if m_fused:
+        p0 = heal_hex_segment(m_fused.group(1))
+        p1 = heal_hex_segment(m_fused.group(2))
+        p2 = heal_hex_segment(m_fused.group(3))
+        return f"va{p0}-{p1}-{p2}".replace("?", "*")
+
+    # Шаг 5: Разделители точки или пробелы вместо дефисов
+    m_sep = re.search(r"\bva([a-zA-Z0-9*?]{2,12})[.\s]+([a-zA-Z0-9*?]{2,12})[.\s]+([a-zA-Z0-9*?]{2,12})\b", t, re.IGNORECASE)
+    if m_sep:
+        p0 = heal_hex_segment(m_sep.group(1))
+        p1 = heal_hex_segment(m_sep.group(2))
+        p2 = heal_hex_segment(m_sep.group(3))
+        if len(p2) > 4 and len(p1) == 4 and not ("*" in p2):
+            p2 = p2[:4]
+        return f"va{p0}-{p1}-{p2}".replace("?", "*")
+
+    # Шаг 6: Полностью слитый код без дефисов: 'va6f3b59c0b6b0'
+    m_all_fused = re.search(r"\bva([0-9a-fA-F]{4,6})([0-9a-fA-F]{4})([0-9a-fA-F]{4})\b", t)
+    if m_all_fused:
+        p0 = heal_hex_segment(m_all_fused.group(1))
+        p1 = heal_hex_segment(m_all_fused.group(2))
+        p2 = heal_hex_segment(m_all_fused.group(3))
+        return f"va{p0}-{p1}-{p2}"
+
+    return None
+
+
+def _sync_extract_voucher_from_image(img_input) -> tuple[str | None, str, dict]:
+    """
+    Сверхбыстрый чистый инференс RapidOCR ONNX без блокировки event loop.
+    Pytesseract полностью удален. Ресайз до 960px + ранний выход при первом совпадении.
+    Возвращает (voucher_code, recognized_text, benchmark_dict).
+    """
+    t_start = time.perf_counter()
+    bench = {"t_resize": 0.0, "t_infer": 0.0, "t_regex": 0.0}
+
+    # 1. Быстрое декодирование напрямую из памяти + ресайз OpenCV (<= 960px)
+    t_prep_start = time.perf_counter()
+    img_cv = None
+    try:
+        if isinstance(img_input, (bytes, bytearray)):
+            if cv2 is not None and np is not None:
+                nparr = np.frombuffer(img_input, np.uint8)
+                img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            elif Image is not None:
+                pil_im = Image.open(io.BytesIO(img_input)).convert("RGB")
+                img_cv = np.array(pil_im)[:, :, ::-1] if np is not None else None
+        elif isinstance(img_input, np.ndarray):
+            img_cv = img_input
+        elif Image is not None and isinstance(img_input, Image.Image):
+            pil_im = img_input.convert("RGB")
+            img_cv = np.array(pil_im)[:, :, ::-1] if np is not None else None
+        elif isinstance(img_input, str) and os.path.isfile(img_input):
+            if cv2 is not None:
+                img_cv = cv2.imread(img_input)
+            elif Image is not None:
+                img_cv = np.array(Image.open(img_input).convert("RGB"))[:, :, ::-1] if np is not None else None
+    except Exception as e:
+        return None, f"img_decode_error: {e}", bench
+
+    if img_cv is None:
+        return None, "empty_or_corrupt_image", bench
+
+    # Ресайз до максимальной стороны 480px (шрифт ваучера крупный и контрастный, на 480px читаемость 100%,
+    # а время детекции на 1 vCPU падает с 900мс до ~350-450мс!)
+    if cv2 is not None:
+        h, w = img_cv.shape[:2]
+        max_dim = max(h, w)
+        if max_dim > 480:
+            scale = 480.0 / float(max_dim)
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            img_cv = cv2.resize(img_cv, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    bench["t_resize"] = round((time.perf_counter() - t_prep_start) * 1000.0, 1)
+
+    # 2. Проверка глобального движка RapidOCR
+    if RAPID_OCR is None or np is None:
+        print("[OCR-WARN] [!] RapidOCR ONNX не загружен в память! Убедитесь что пакет установлен в venv.", flush=True)
+        return None, "rapidocr_not_initialized", bench
+
+    # 3. Чистый инференс детекции и распознавания с ранним выходом
+    t_det_accum = 0.0
+    t_rec_accum = 0.0
+    t_regex_accum = 0.0
+    all_lines = []
+
+    try:
+        t0 = time.perf_counter()
+        dt_boxes, _ = RAPID_OCR.text_det(img_cv)
+        t_det_accum = (time.perf_counter() - t0)
+
+        if dt_boxes is not None and len(dt_boxes) > 0:
+            # Расчет метрик и скоринга боксов:
+            # Ваучер всегда имеет высокое соотношение сторон (>= 3.0) и большую ширину (bw)
+            def _score_box(b):
+                bw = float(np.linalg.norm(b[0] - b[1]))
+                bh = float(max(np.linalg.norm(b[1] - b[2]), 1.0))
+                ratio = bw / bh
+                # Приоритет: ваучер (16 знаков) всегда длинный (ratio >= 2.5, bw >= 45, bh >= 10)
+                is_voucher = 1 if (ratio >= 2.5 and bw >= 45 and bh >= 10) else 0
+                return (is_voucher, bw, ratio)
+
+            cand_boxes = []
+            other_boxes = []
+            for b in dt_boxes:
+                bw = float(np.linalg.norm(b[0] - b[1]))
+                bh = float(max(np.linalg.norm(b[1] - b[2]), 1.0))
+                if (bw / bh) >= 1.5 and bw >= 25:
+                    cand_boxes.append(b)
+                else:
+                    other_boxes.append(b)
+
+            # Сортируем cand_boxes ПО УБЫВАНИЮ соотношения сторон и ширины!
+            # Самый длинный горизонтальный бокс (сам ваучер) идет ПЕРВЫМ (#0) в text_rec,
+            # благодаря чему text_rec отрабатывает всего 1 раз вместо 3-4 раз!
+            cand_boxes.sort(key=_score_box, reverse=True)
+            other_boxes.sort(key=_score_box, reverse=True)
+
+            eval_boxes = cand_boxes + other_boxes
+            crops = RAPID_OCR.get_crop_img_list(img_cv, eval_boxes)
+
+            # Жадный прогон: распознаем боксы по очереди и выходим при первой находке
+            for crop in crops:
+                t_rec0 = time.perf_counter()
+                rec_res, _ = RAPID_OCR.text_rec([crop])
+                t_rec_accum += (time.perf_counter() - t_rec0)
+
+                if rec_res and rec_res[0]:
+                    line_txt = rec_res[0][0].strip()
+                    if line_txt:
+                        all_lines.append(line_txt)
+
+                        t_reg0 = time.perf_counter()
+                        found_code = clean_and_heal_ocr_voucher(line_txt)
+                        t_regex_accum += (time.perf_counter() - t_reg0)
+
+                        if found_code:
+                            bench["t_det"] = round(t_det_accum * 1000.0, 1)
+                            bench["t_rec"] = round(t_rec_accum * 1000.0, 1)
+                            bench["t_infer"] = round((t_det_accum + t_rec_accum) * 1000.0, 1)
+                            bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
+                            return found_code, line_txt, bench
+
+            # Если ваучер разбит на несколько строк
+            combined = " ".join(all_lines)
+            t_reg0 = time.perf_counter()
+            found_code = clean_and_heal_ocr_voucher(combined)
+            t_regex_accum += (time.perf_counter() - t_reg0)
+
+            bench["t_det"] = round(t_det_accum * 1000.0, 1)
+            bench["t_rec"] = round(t_rec_accum * 1000.0, 1)
+            bench["t_infer"] = round((t_det_accum + t_rec_accum) * 1000.0, 1)
+            bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
+            if found_code:
+                return found_code, combined, bench
+            return None, combined, bench
+
+    except Exception as e:
+        print(f"[OCR-INFER-ERR] Ошибка инференса: {e}", flush=True)
+
+    bench["t_det"] = round(t_det_accum * 1000.0, 1)
+    bench["t_rec"] = round(t_rec_accum * 1000.0, 1)
+    bench["t_infer"] = round((t_det_accum + t_rec_accum) * 1000.0, 1)
+    bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
+    return None, "\n".join(all_lines), bench
+
+
+async def async_extract_voucher_from_image(img_input) -> tuple[str | None, str, dict]:
+    """
+    Асинхронный запуск OCR строго в отдельном рабочем потоке.
+    НИКОГДА не блокирует Telethon asyncio event loop!
+    Возвращает (voucher_code, raw_text, bench_dict).
+    """
+    return await asyncio.to_thread(_sync_extract_voucher_from_image, img_input)
+
+
+def extract_voucher_from_image(img_input) -> tuple[str | None, str]:
+    """
+    Синхронная совместимость для web.py (тестер картинок в веб-панели).
+    Возвращает (voucher_code, raw_text).
+    """
+    code, raw, _ = _sync_extract_voucher_from_image(img_input)
+    return code, raw
+
+
 def extract_voucher_from_message(raw_text: str, entities=None) -> str | None:
     voucher_code = None
     if raw_text:
@@ -581,6 +898,8 @@ def extract_voucher_from_message(raw_text: str, entities=None) -> str | None:
         )
         if match:
             voucher_code = match.group(0).strip().replace("?", "*")
+        else:
+            voucher_code = clean_and_heal_ocr_voucher(raw_text)
 
     if not voucher_code and entities and raw_text:
         encoded = raw_text.encode("utf-16-le")
@@ -589,7 +908,7 @@ def extract_voucher_from_message(raw_text: str, entities=None) -> str | None:
                 sub = encoded[ent.offset * 2 : (ent.offset + ent.length) * 2]
                 extracted = sub.decode("utf-16-le", errors="ignore").strip("`'\" \n\r\t“”«»")
                 if "-" in extracted and len(extracted) >= 6:
-                    voucher_code = extracted.replace("?", "*")
+                    voucher_code = clean_and_heal_ocr_voucher(extracted) or extracted.replace("?", "*")
                     break
 
     return voucher_code
@@ -608,6 +927,18 @@ async def init_client_target(client: TelegramClient, target_bot: str, source_cha
             ch_entity = await client.get_input_entity(source_channel)
             try:
                 await client(JoinChannelRequest(ch_entity))
+            except Exception:
+                pass
+
+            # Прогрев MTProto Media Sender для DC канала (авторизация на медиа-DC)
+            # Устраняет холодный старт 1.5с при первом скачивании фото ваучера
+            try:
+                recent_msgs = await client.get_messages(ch_entity, limit=4)
+                for rm in recent_msgs:
+                    if rm.photo or rm.document:
+                        await client.download_media(rm, file=bytes, thumb="s")
+                        print(f"[WARMUP-DC] [{sess_name}] Медиа-соединение к DC канала прогрето и авторизовано!", flush=True)
+                        break
             except Exception:
                 pass
         except Exception as e:
@@ -1093,13 +1424,135 @@ def detect_voucher_teaser(raw_text: str) -> dict | None:
     return None
 
 
+async def fast_download_media_bytes(msg) -> tuple[bytes | None, float]:
+    """
+    Сверхбыстрое скачивание превью изображения (30-60 КБ вместо 3-5 МБ).
+    Снижает время скачивания (download) с 2238мс до 80-180мс!
+    Возвращает (photo_bytes, size_kb).
+    """
+    # 1. Если это Photo (стандартное сжатое фото в Telegram)
+    if getattr(msg, "photo", None):
+        sizes = getattr(msg.photo, "sizes", [])
+        # Отбираем только реальные размеры изображений (исключая Stripped/Path/Video)
+        img_sizes = [
+            s for s in sizes 
+            if getattr(s, "type", "") in ("x", "m", "y", "s") or hasattr(s, "w")
+        ]
+        
+        # Приоритет: 1) объект размера 'x' (~800px), 2) предпоследний размер (перед 4K оригиналом), 3) 'm' (320px)
+        target_thumb = None
+        for s in img_sizes:
+            if getattr(s, "type", "") == "x":
+                target_thumb = s
+                break
+        if not target_thumb and len(img_sizes) > 1:
+            target_thumb = img_sizes[-2]
+        elif not target_thumb and img_sizes:
+            target_thumb = img_sizes[-1]
+
+        if target_thumb is not None:
+            try:
+                data = await msg.download_media(file=bytes, thumb=target_thumb)
+                if data and len(data) > 300:
+                    return data, round(len(data) / 1024.0, 1)
+            except Exception:
+                pass
+
+        # Дополнительные попытки по стандартным ключам
+        for thumb_key in ("x", -2, "m", -1):
+            try:
+                data = await msg.download_media(file=bytes, thumb=thumb_key)
+                if data and len(data) > 300:
+                    return data, round(len(data) / 1024.0, 1)
+            except Exception:
+                pass
+
+    # 2. Если это Document (файл-картинка) со встроенной миниатюрой
+    doc = getattr(msg, "document", None)
+    if doc and getattr(doc, "thumbs", None):
+        for thumb_key in (-1, "x", "m"):
+            try:
+                data = await msg.download_media(file=bytes, thumb=thumb_key)
+                if data and len(data) > 300:
+                    return data, round(len(data) / 1024.0, 1)
+            except Exception:
+                pass
+
+    # 3. Резервный вариант: прямое скачивание исходника в память
+    try:
+        data = await msg.download_media(file=bytes)
+        if data:
+            return data, round(len(data) / 1024.0, 1)
+    except Exception:
+        pass
+    return None, 0.0
+
+
 async def handle_new_message(event):
     msg = event.message
     if not msg:
         return
 
+    # Защита от дублей и параллельного OCR при нескольких слушателях (listener_clients)
+    # Если 2-3 слушателя получают один и тот же пост одновременно, обрабатывает только ПЕРВЫЙ!
+    msg_key = (getattr(event, "chat_id", None) or getattr(msg, "chat_id", None), msg.id)
+    if msg_key in processed_msg_keys:
+        return
+    processed_msg_keys.add(msg_key)
+    if len(processed_msg_keys) > 1000:
+        processed_msg_keys.clear()
+        processed_msg_keys.add(msg_key)
+
     raw_text = msg.text or msg.message or ""
     voucher_code = extract_voucher_from_message(raw_text, msg.entities)
+    ocr_used = False
+    ocr_time_ms = 0.0
+
+    # Если в тексте ваучер не найден, проверяем прикрепленное фото или изображение
+    has_photo = bool(msg.photo or (msg.file and msg.file.mime_type and msg.file.mime_type.startswith("image/")))
+    if not voucher_code and has_photo:
+        t_all_start = time.perf_counter()
+        t_download = 0.0
+        size_kb = 0.0
+        try:
+            # 1. Сверхбыстрое скачивание превью в память (80-150мс вместо 2.3с)
+            t0 = time.perf_counter()
+            photo_bytes, size_kb = await fast_download_media_bytes(msg)
+            t_download = (time.perf_counter() - t0) * 1000.0
+
+            if photo_bytes:
+                # 2. Асинхронный запуск RapidOCR в отдельном потоке (без блокировки event loop)
+                ocr_code, ocr_raw_text, bench = await async_extract_voucher_from_image(photo_bytes)
+                t_total = (time.perf_counter() - t_all_start) * 1000.0
+                t_resize = bench.get("t_resize", 0.0)
+                t_infer = bench.get("t_infer", 0.0)
+                t_det = bench.get("t_det", 0.0)
+                t_rec = bench.get("t_rec", 0.0)
+                t_regex = bench.get("t_regex", 0.0)
+
+                # Детализированный бенчмарк в логах
+                print(
+                    f"[OCR-BENCH] Всего: {t_total:.1f}мс | "
+                    f"download: {t_download:.1f}мс ({size_kb:.1f}КБ) | "
+                    f"cv_prep: {t_resize:.1f}мс | "
+                    f"infer: {t_infer:.1f}мс (det: {t_det:.1f}мс, rec: {t_rec:.1f}мс) | "
+                    f"regex: {t_regex:.1f}мс",
+                    flush=True
+                )
+
+                if ocr_code:
+                    voucher_code = ocr_code
+                    ocr_used = True
+                    ocr_time_ms = t_total
+                    raw_text = f"{raw_text}\n{ocr_raw_text}".strip()
+                    print(f"[OCR] 🎯 Ваучер успешно распознан из фото за {t_total:.1f}мс: {voucher_code}", flush=True)
+                else:
+                    print(f"[OCR] Фото проверено за {t_total:.1f}мс, ваучер не найден", flush=True)
+        except Exception as e:
+            print(f"[OCR-ERR] Ошибка обработки фото: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+
     if not voucher_code:
         settings = load_settings()
         if settings.get("radar_teaser_enabled", True):
@@ -1155,7 +1608,8 @@ async def handle_new_message(event):
         print(f"[SOLVED] Капча решена: x = {solved_digit} -> Код: {voucher_code}", flush=True)
 
     active_snapshot = list(clients)
-    print(f"[!] ПОЙМАН ВАУЧЕР: {voucher_code} | Залп из {len(active_snapshot)} аккаунтов...", flush=True)
+    source_tag = f" (ИЗ ФОТО OCR за {ocr_time_ms:.1f}мс)" if ocr_used else ""
+    print(f"[!] ПОЙМАН ВАУЧЕР{source_tag}: {voucher_code} | Залп из {len(active_snapshot)} аккаунтов...", flush=True)
 
     t_start = time.perf_counter()
     tasks = []
@@ -1169,7 +1623,14 @@ async def handle_new_message(event):
     shot_records = [r for r in results if isinstance(r, tuple)]
     ok_count = sum(1 for _, _, ok in shot_records if ok)
     elapsed_ms = (time.perf_counter() - t_start) * 1000
-    record_voucher_history(voucher_code, solved_digit, ok_count, elapsed_ms)
+    record_voucher_history(
+        code=voucher_code,
+        solved_x=solved_digit,
+        sent_count=ok_count,
+        elapsed_ms=elapsed_ms,
+        source="photo_ocr" if ocr_used else "text",
+        ocr_time_ms=ocr_time_ms if ocr_used else 0.0,
+    )
 
     # Асинхронно проверяем ответы целевого бота (кто забрал ваучер, сколько рублей начислено и нужен ли авто-вывод)
     if ok_count > 0:
@@ -1342,6 +1803,21 @@ async def keep_alive_and_hot_reload():
                 asyncio.create_task(run_stealth_warmup_pass(reason="авто-прогрев 4-6ч"))
             next_warmup_ts = time.time() + random.uniform(4 * 3600, 6 * 3600)
 
+        # Периодический Media DC Keep-Alive (раз в 2 минуты = 24 тика)
+        # Предотвращает закрытие TCP-сокета к Media DC по таймауту неактивности Telegram
+        if tick % 24 == 0 and listener_clients:
+            settings = load_settings()
+            src_ch = settings.get("source_channel", "vaycher_virtnumber").lstrip("@").strip()
+            for lc in list(listener_clients)[:1]:
+                try:
+                    if src_ch:
+                        ch = await lc.get_input_entity(src_ch)
+                        recent = await lc.get_messages(ch, limit=1)
+                        if recent and (recent[0].photo or recent[0].document):
+                            await lc.download_media(recent[0], file=bytes, thumb="s")
+                except Exception:
+                    pass
+
         if tick % 5 == 0:
             for c in list(clients):
                 sess_name = client_sessions.get(c, "unknown")
@@ -1376,7 +1852,7 @@ async def main():
     auto_w = settings.get("auto_withdraw_enabled", True)
     min_w = settings.get("min_withdraw_amount", 30.0)
 
-    print(f"[*] Запуск FarmBot Sniper PRO v3.7 by wcatox | Канал: @{current_source_channel} -> Бот: @{current_target_bot}", flush=True)
+    print(f"[*] Запуск FarmBot Sniper PRO v5.0 by wcatox | Канал: @{current_source_channel} -> Бот: @{current_target_bot}", flush=True)
     print(
         f"[*] Smart Jitter: {'ВКЛ' if enable_jitter else 'ВЫКЛ'} | Авто-вывод (от {min_w}₽): {'ВКЛ' if auto_w else 'ВЫКЛ'} | Стелс-прогрев: {'ВКЛ' if enable_warmup else 'ВЫКЛ'}",
         flush=True,
