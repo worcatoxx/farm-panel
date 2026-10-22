@@ -12,7 +12,7 @@ DATA_DIR="/root/farm_data"
 show_menu() {
     clear
     echo -e "${SKY}==================================================${PLAIN}"
-    echo -e "${SKY}     FarmBot Sniper v3.0 - Панель управления      ${PLAIN}"
+    echo -e "${SKY}     FarmBot Sniper v5.0 TURBO - Панель управления      ${PLAIN}"
     echo -e "${SKY}==================================================${PLAIN}"
     
     if systemctl is-active --quiet farmbot; then

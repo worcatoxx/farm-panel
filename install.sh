@@ -112,7 +112,7 @@ fi
 echo "=== [6/6] Настройка фоновых служб ==="
 cat << 'EOF' > /etc/systemd/system/farmweb.service
 [Unit]
-Description=FarmBot Web Panel v3.0
+Description=FarmBot Web Panel v5.0
 After=network.target
 StartLimitIntervalSec=0
 
@@ -131,7 +131,7 @@ EOF
 
 cat << 'EOF' > /etc/systemd/system/farmbot.service
 [Unit]
-Description=FarmBot Sniper Daemon v3.0
+Description=FarmBot Sniper Daemon v5.0
 After=network.target
 StartLimitIntervalSec=0
 
@@ -154,7 +154,7 @@ systemctl restart farmweb farmbot
 
 IP=$(curl -s https://api.ipify.org || echo "IP_СЕРВЕРА")
 echo "=================================================="
-echo " Установка FarmBot Sniper v3.0 завершена!"
+echo " Установка FarmBot Sniper v5.0 завершена!"
 echo " Веб-панель: http://$IP (или :8080)"
 echo " Логин: admin | Пароль: superpass123"
 echo " Консольное меню управления: команда 'farm'"
