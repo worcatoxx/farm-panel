@@ -52,27 +52,31 @@ except ImportError:
 RAPID_OCR = None
 try:
     from rapidocr_onnxruntime import RapidOCR
-    print("[OCR-INIT] [*] Загрузка весов RapidOCR ONNX (1 vCPU Ultra-Mode)...", flush=True)
+    print("[OCR-INIT] [*] Загрузка модели RapidOCR ONNX (1 vCPU Turbo)...", flush=True)
     _t_init = time.perf_counter()
-    RAPID_OCR = RapidOCR(
-        intra_op_num_threads=1,
-        inter_op_num_threads=1,
-        det_limit_side_len=480,
-        det_limit_type="max",
-        use_cls=False,
-        use_angle_cls=False,
-    )
-    # Фиксация параметров детекции без апскейла
-    if hasattr(RAPID_OCR, "text_det"):
-        RAPID_OCR.text_det.limit_side_len = 480
-        RAPID_OCR.text_det.limit_type = "max"
+    try:
+        RAPID_OCR = RapidOCR()
+    except Exception:
+        RAPID_OCR = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
 
-    # Однократный прогрев (warmup) модели при старте bot.py на тестовой матрице
+    # Ограничение стороны детекции до 480px (ускоряет инференс в 2.5 раза на 1 vCPU)
+    if hasattr(RAPID_OCR, "text_det"):
+        try:
+            RAPID_OCR.text_det.limit_side_len = 480
+            RAPID_OCR.text_det.limit_type = "max"
+        except Exception:
+            pass
+
+    # Холостой прогрев (warmup)
     if np is not None:
         _dummy_mat = np.zeros((100, 100, 3), dtype=np.uint8)
-        RAPID_OCR(_dummy_mat, use_cls=False)
+        try:
+            RAPID_OCR(_dummy_mat)
+        except Exception:
+            pass
+
     _t_warmup = (time.perf_counter() - _t_init) * 1000.0
-    print(f"[OCR-INIT] [OK] RapidOCR ONNX успешно загружен и прогрет за {_t_warmup:.1f}мс (1 поток, det=480 max)!", flush=True)
+    print(f"[OCR-INIT] [OK] RapidOCR ONNX успешно загружен и прогрет за {_t_warmup:.1f}мс (1 vCPU Turbo, det=480 max)!", flush=True)
 except Exception as _e:
     print(f"[OCR-INIT] [ERR] Ошибка инициализации RapidOCR: {_e}", flush=True)
     import traceback
@@ -139,6 +143,61 @@ current_source_channel = "vaycher_virtnumber"
 current_target_bot = "Virtnumber_buy_bot"
 warmup_in_progress = False
 autowithdraw_locks = set()
+_global_bot_withdraw_lock = asyncio.Lock()
+WITHDRAW_LOCK_FILE = os.path.join(DATA_DIR, ".withdraw_transfer.lock")
+
+
+class InterProcessWithdrawLock:
+    """Межпроцессная и межпоточная блокировка вывода средств (Web + Bot).
+
+    Гарантирует строго поочередный вывод баланса на логин сайта Virtnumber / SMS-PRO.
+    Предотвращает гонку транзакций в базе сайта при одновременных запросах с нескольких аккаунтов.
+    """
+
+    def __init__(self, lock_path: str = WITHDRAW_LOCK_FILE, timeout: float = 90.0):
+        self.lock_path = lock_path
+        self.timeout = timeout
+        self.fd = None
+
+    async def __aenter__(self):
+        start = time.time()
+        while True:
+            try:
+                self.fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                try:
+                    os.write(self.fd, f"{os.getpid()}:{time.time()}".encode("utf-8"))
+                except OSError:
+                    pass
+                return self
+            except FileExistsError:
+                # Проверяем, не завис ли старый lock файл (более 90 сек)
+                try:
+                    mtime = os.path.getmtime(self.lock_path)
+                    if time.time() - mtime > 90:
+                        try:
+                            os.remove(self.lock_path)
+                            continue
+                        except OSError:
+                            pass
+                except OSError:
+                    pass
+                if time.time() - start > self.timeout:
+                    print("[WARN] Таймаут ожидания очереди вывода, продолжаем выполнение...", flush=True)
+                    return self
+                await asyncio.sleep(0.3)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        try:
+            if os.path.exists(self.lock_path):
+                os.remove(self.lock_path)
+        except OSError:
+            pass
 
 # Расширенный пул реалистичных индивидуальных отпечатков устройств (24 профиля)
 DEVICE_PROFILES = [
@@ -258,6 +317,8 @@ def load_settings() -> dict:
         "jitter_max_ms": 80,
         "min_withdraw_amount": 30.0,
         "auto_withdraw_enabled": True,
+        "withdraw_delay_min_sec": 3.5,
+        "withdraw_delay_max_sec": 6.5,
         "site_withdraw_login": "",
         "total_withdrawn_rub": 0.0,
         "total_withdrawn_count": 0,
@@ -661,7 +722,7 @@ CYRILLIC_HOMOGLYPHS = str.maketrans({
 })
 
 VOUCHER_REGEX = re.compile(
-    r"\b(va[a-zA-Z0-9*?]{2,12}(?:-[a-zA-Z0-9*?]{2,12})+)\b",
+    r"\b(va[a-zA-Z0-9*?]{1,12}(?:-[a-zA-Z0-9*?]{1,12})+)\b",
     re.IGNORECASE
 )
 
@@ -677,15 +738,19 @@ def clean_and_heal_ocr_voucher(text: str) -> str | None:
     if not text:
         return None
 
-    # Шаг 1: Нормализация дефисов, тире, подчеркиваний и пробелов вокруг них
-    t = re.sub(r"[\u2010-\u2015\u2212_~]", "-", text)
+    # Шаг 1: Нормализация дефисов, тире, подчеркиваний, точек и пробелов вокруг них
+    t = re.sub(r"[\u2010-\u2015\u2212_~.]", "-", text)
     t = re.sub(r"\s*-\s*", "-", t)
 
-    # Шаг 2: Нормализация кириллических опечаток (например 'ва' вместо 'va')
+    # Шаг 2: Нормализация опечаток начала ваучера (все ваучеры начинаются на va)
+    t = re.sub(r"[\u00a5\uffe5]", "v", t)
     t = re.sub(r"\b[вВ][аАaA]", "va", t)
+    t = re.sub(r"\b[vVyY][48qQ]", "va", t)
+    t = re.sub(r"\b[vVyY][uUoO0]", "va", t)
+    t = re.sub(r"\b[vVyY](?=[0-9b-zB-Z][0-9a-zA-Z]{2,5}-)", "va", t)
     t = t.translate(CYRILLIC_HOMOGLYPHS)
 
-    # Шаг 3: Поиск по целевому regex (все ваучеры начинаются на va): r'\b(va[a-zA-Z0-9*?]{2,12}(?:-[a-zA-Z0-9*?]{2,12})+)\b'
+    # Шаг 3: Поиск по целевому regex
     m = VOUCHER_REGEX.search(t)
     if m:
         cand = m.group(1)
@@ -695,21 +760,20 @@ def clean_and_heal_ocr_voucher(text: str) -> str | None:
             healed = [p0]
             for p in parts[1:]:
                 healed.append(heal_hex_segment(p))
-            # Если к последнему сегменту прилипли цифры таймстампа/хвоста (например 1b6b22:44 или b6b0)
             if len(healed[-1]) > 5 and len(healed[-2]) <= 5 and not ("*" in healed[-1]):
                 healed[-1] = healed[-1][:len(healed[-2])]
             return "-".join(healed).replace("?", "*")
 
     # Шаг 4: Слитый средний или последний сегмент: 'va6f8b-59C01B6B0'
-    m_fused = re.search(r"\bva([a-zA-Z0-9*?]{4,6})-([a-zA-Z0-9*?]{4})[1I\-]?([a-zA-Z0-9*?]{4})\b", t, re.IGNORECASE)
+    m_fused = re.search(r"\bva([a-zA-Z0-9*?]{2,6})-([a-zA-Z0-9*?]{2,6})[1I\-]?([a-zA-Z0-9*?]{2,6})\b", t, re.IGNORECASE)
     if m_fused:
         p0 = heal_hex_segment(m_fused.group(1))
         p1 = heal_hex_segment(m_fused.group(2))
         p2 = heal_hex_segment(m_fused.group(3))
         return f"va{p0}-{p1}-{p2}".replace("?", "*")
 
-    # Шаг 5: Разделители точки или пробелы вместо дефисов
-    m_sep = re.search(r"\bva([a-zA-Z0-9*?]{2,12})[.\s]+([a-zA-Z0-9*?]{2,12})[.\s]+([a-zA-Z0-9*?]{2,12})\b", t, re.IGNORECASE)
+    # Шаг 5: Разделители точки, пробелы или дефисы
+    m_sep = re.search(r"\bva([a-zA-Z0-9*?]{1,12})[.\s\-]+([a-zA-Z0-9*?]{1,12})[.\s\-]+([a-zA-Z0-9*?]{1,12})\b", t, re.IGNORECASE)
     if m_sep:
         p0 = heal_hex_segment(m_sep.group(1))
         p1 = heal_hex_segment(m_sep.group(2))
@@ -732,13 +796,13 @@ def clean_and_heal_ocr_voucher(text: str) -> str | None:
 def _sync_extract_voucher_from_image(img_input) -> tuple[str | None, str, dict]:
     """
     Сверхбыстрый чистый инференс RapidOCR ONNX без блокировки event loop.
-    Pytesseract полностью удален. Ресайз до 960px + ранний выход при первом совпадении.
+    Pytesseract полностью удален. Адаптивный ресайз + ранний выход при первом совпадении.
     Возвращает (voucher_code, recognized_text, benchmark_dict).
     """
     t_start = time.perf_counter()
     bench = {"t_resize": 0.0, "t_infer": 0.0, "t_regex": 0.0}
 
-    # 1. Быстрое декодирование напрямую из памяти + ресайз OpenCV (<= 960px)
+    # 1. Быстрое декодирование напрямую из памяти + адаптивный ресайз OpenCV
     t_prep_start = time.perf_counter()
     img_cv = None
     try:
@@ -765,20 +829,45 @@ def _sync_extract_voucher_from_image(img_input) -> tuple[str | None, str, dict]:
     if img_cv is None:
         return None, "empty_or_corrupt_image", bench
 
-    # Ресайз до максимальной стороны 480px (шрифт ваучера крупный и контрастный, на 480px читаемость 100%,
-    # а время детекции на 1 vCPU падает с 900мс до ~350-450мс!)
+    # Адаптивный ресайз:
+    # Если изображение слишком большое (скриншот телефона) — уменьшаем до 640px
+    # Если изображение маленькое или кроп — пропорционально увеличиваем для четкого детекта
     if cv2 is not None:
         h, w = img_cv.shape[:2]
         max_dim = max(h, w)
-        if max_dim > 480:
-            scale = 480.0 / float(max_dim)
+        min_dim = min(h, w)
+        if max_dim > 640:
+            scale = 640.0 / float(max_dim)
             new_w = max(1, int(w * scale))
             new_h = max(1, int(h * scale))
             img_cv = cv2.resize(img_cv, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        elif max_dim < 500 or min_dim < 260:
+            scale = max(500.0 / float(max_dim), 260.0 / float(max(min_dim, 1)))
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            img_cv = cv2.resize(img_cv, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
 
     bench["t_resize"] = round((time.perf_counter() - t_prep_start) * 1000.0, 1)
 
-    # 2. Проверка глобального движка RapidOCR
+    # 2. Проверка и ленивая инициализация RapidOCR при необходимости
+    global RAPID_OCR
+    if RAPID_OCR is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            try:
+                RAPID_OCR = RapidOCR()
+            except Exception:
+                RAPID_OCR = RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
+            if hasattr(RAPID_OCR, "text_det"):
+                try:
+                    RAPID_OCR.text_det.limit_side_len = 480
+                    RAPID_OCR.text_det.limit_type = "max"
+                except Exception:
+                    pass
+            print("[OCR] Ленивая инициализация RapidOCR выполнена!", flush=True)
+        except Exception as _e:
+            print(f"[OCR-WARN] Ошибка ленивой инициализации RapidOCR: {_e}", flush=True)
+
     if RAPID_OCR is None or np is None:
         print("[OCR-WARN] [!] RapidOCR ONNX не загружен в память! Убедитесь что пакет установлен в venv.", flush=True)
         return None, "rapidocr_not_initialized", bench
@@ -790,84 +879,101 @@ def _sync_extract_voucher_from_image(img_input) -> tuple[str | None, str, dict]:
     all_lines = []
 
     try:
-        t0 = time.perf_counter()
-        dt_boxes, _ = RAPID_OCR.text_det(img_cv)
-        t_det_accum = (time.perf_counter() - t0)
+        # 1. Если версия RapidOCR поддерживает раздельный вызов text_det и text_rec
+        can_split = hasattr(RAPID_OCR, "text_det") and hasattr(RAPID_OCR, "text_rec") and hasattr(RAPID_OCR, "get_crop_img_list")
+        if can_split:
+            t0 = time.perf_counter()
+            dt_boxes, _ = RAPID_OCR.text_det(img_cv)
+            t_det_accum = (time.perf_counter() - t0)
 
-        if dt_boxes is not None and len(dt_boxes) > 0:
-            # Расчет метрик и скоринга боксов:
-            # Ваучер всегда имеет высокое соотношение сторон (>= 3.0) и большую ширину (bw)
-            def _score_box(b):
-                bw = float(np.linalg.norm(b[0] - b[1]))
-                bh = float(max(np.linalg.norm(b[1] - b[2]), 1.0))
-                ratio = bw / bh
-                # Приоритет: ваучер (16 знаков) всегда длинный (ratio >= 2.5, bw >= 45, bh >= 10)
-                is_voucher = 1 if (ratio >= 2.5 and bw >= 45 and bh >= 10) else 0
-                return (is_voucher, bw, ratio)
+            if dt_boxes is not None and len(dt_boxes) > 0:
+                def _score_box(b):
+                    bw = float(np.linalg.norm(b[0] - b[1]))
+                    bh = float(max(np.linalg.norm(b[1] - b[2]), 1.0))
+                    ratio = bw / bh
+                    is_voucher = 1 if (ratio >= 2.5 and bw >= 45 and bh >= 10) else 0
+                    return (is_voucher, bw, ratio)
 
-            cand_boxes = []
-            other_boxes = []
-            for b in dt_boxes:
-                bw = float(np.linalg.norm(b[0] - b[1]))
-                bh = float(max(np.linalg.norm(b[1] - b[2]), 1.0))
-                if (bw / bh) >= 1.5 and bw >= 25:
-                    cand_boxes.append(b)
-                else:
-                    other_boxes.append(b)
+                cand_boxes = []
+                other_boxes = []
+                for b in dt_boxes:
+                    bw = float(np.linalg.norm(b[0] - b[1]))
+                    bh = float(max(np.linalg.norm(b[1] - b[2]), 1.0))
+                    if (bw / bh) >= 1.5 and bw >= 25:
+                        cand_boxes.append(b)
+                    else:
+                        other_boxes.append(b)
 
-            # Сортируем cand_boxes ПО УБЫВАНИЮ соотношения сторон и ширины!
-            # Самый длинный горизонтальный бокс (сам ваучер) идет ПЕРВЫМ (#0) в text_rec,
-            # благодаря чему text_rec отрабатывает всего 1 раз вместо 3-4 раз!
-            cand_boxes.sort(key=_score_box, reverse=True)
-            other_boxes.sort(key=_score_box, reverse=True)
+                cand_boxes.sort(key=_score_box, reverse=True)
+                other_boxes.sort(key=_score_box, reverse=True)
 
-            eval_boxes = cand_boxes + other_boxes
-            crops = RAPID_OCR.get_crop_img_list(img_cv, eval_boxes)
+                eval_boxes = cand_boxes + other_boxes
+                crops = RAPID_OCR.get_crop_img_list(img_cv, eval_boxes)
 
-            # Жадный прогон: распознаем боксы по очереди и выходим при первой находке
-            for crop in crops:
-                t_rec0 = time.perf_counter()
-                rec_res, _ = RAPID_OCR.text_rec([crop])
-                t_rec_accum += (time.perf_counter() - t_rec0)
+                for crop in crops:
+                    t_rec0 = time.perf_counter()
+                    rec_res, _ = RAPID_OCR.text_rec([crop])
+                    t_rec_accum += (time.perf_counter() - t_rec0)
 
-                if rec_res and rec_res[0]:
-                    line_txt = rec_res[0][0].strip()
-                    if line_txt:
+                    if rec_res and rec_res[0]:
+                        line_txt = rec_res[0][0].strip()
+                        if line_txt:
+                            all_lines.append(line_txt)
+
+                            t_reg0 = time.perf_counter()
+                            found_code = clean_and_heal_ocr_voucher(line_txt)
+                            t_regex_accum += (time.perf_counter() - t_reg0)
+
+                            if found_code:
+                                bench["t_det"] = round(t_det_accum * 1000.0, 1)
+                                bench["t_rec"] = round(t_rec_accum * 1000.0, 1)
+                                bench["t_infer"] = round((t_det_accum + t_rec_accum) * 1000.0, 1)
+                                bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
+                                return found_code, line_txt, bench
+
+        # 2. Универсальный вызов RAPID_OCR(img_cv): работает на АБСОЛЮТНО ЛЮБОЙ версии библиотеки!
+        if not all_lines:
+            t0 = time.perf_counter()
+            ocr_res, _ = RAPID_OCR(img_cv)
+            t_infer = (time.perf_counter() - t0) * 1000.0
+            bench["t_infer"] = round(t_infer, 1)
+
+            if ocr_res:
+                for item in ocr_res:
+                    if len(item) > 1 and item[1]:
+                        line_txt = str(item[1]).strip()
                         all_lines.append(line_txt)
-
                         t_reg0 = time.perf_counter()
                         found_code = clean_and_heal_ocr_voucher(line_txt)
                         t_regex_accum += (time.perf_counter() - t_reg0)
-
                         if found_code:
-                            bench["t_det"] = round(t_det_accum * 1000.0, 1)
-                            bench["t_rec"] = round(t_rec_accum * 1000.0, 1)
-                            bench["t_infer"] = round((t_det_accum + t_rec_accum) * 1000.0, 1)
                             bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
                             return found_code, line_txt, bench
 
-            # Если ваучер разбит на несколько строк
-            combined = " ".join(all_lines)
-            t_reg0 = time.perf_counter()
-            found_code = clean_and_heal_ocr_voucher(combined)
-            t_regex_accum += (time.perf_counter() - t_reg0)
+        # Если ваучер разбит на несколько строк
+        combined = " ".join(all_lines)
+        t_reg0 = time.perf_counter()
+        found_code = clean_and_heal_ocr_voucher(combined)
+        t_regex_accum += (time.perf_counter() - t_reg0)
 
-            bench["t_det"] = round(t_det_accum * 1000.0, 1)
-            bench["t_rec"] = round(t_rec_accum * 1000.0, 1)
-            bench["t_infer"] = round((t_det_accum + t_rec_accum) * 1000.0, 1)
-            bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
-            if found_code:
-                return found_code, combined, bench
-            return None, combined, bench
+        bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
+        if found_code:
+            return found_code, combined, bench
+        return None, combined, bench
 
     except Exception as e:
+        err_msg = f"ocr_error: {e}"
         print(f"[OCR-INFER-ERR] Ошибка инференса: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        all_lines.append(err_msg)
 
     bench["t_det"] = round(t_det_accum * 1000.0, 1)
     bench["t_rec"] = round(t_rec_accum * 1000.0, 1)
     bench["t_infer"] = round((t_det_accum + t_rec_accum) * 1000.0, 1)
     bench["t_regex"] = round(t_regex_accum * 1000.0, 1)
     return None, "\n".join(all_lines), bench
+
 
 
 async def async_extract_voucher_from_image(img_input) -> tuple[str | None, str, dict]:
@@ -976,7 +1082,7 @@ async def send_to_bot(client: TelegramClient, target_bot: str, code: str, delay_
         return (client, 0, False)
 
 
-# --- Авто-вывод с конкретной суммы на активном клиенте ---
+# --- Авто-вывод с конкретной суммы на активном клиенте (Строгая очередь с задержками) ---
 async def auto_withdraw_single_client(
     client: TelegramClient,
     sess_name: str,
@@ -988,124 +1094,140 @@ async def auto_withdraw_single_client(
         return False
     autowithdraw_locks.add(sess_name)
     try:
-        peer = target_peers.get(client) or await client.get_input_entity(target_bot)
-        cmd = await client.send_message(peer, "/balance")
+        async with _global_bot_withdraw_lock:
+            async with InterProcessWithdrawLock(WITHDRAW_LOCK_FILE):
+                peer = target_peers.get(client) or await client.get_input_entity(target_bot)
+                cmd = await client.send_message(peer, "/balance")
 
-        balance_msg = None
-        current_bal = None
-        for _ in range(16):
-            await asyncio.sleep(0.15)
-            msgs = await client.get_messages(peer, limit=4)
-            for m in msgs:
-                if m.id > cmd.id and not m.out:
-                    b_str = parse_balance_from_text(m.text or "")
-                    if b_str is not None:
-                        try:
-                            current_bal = float(b_str)
-                        except ValueError:
-                            pass
-                    if m.buttons:
-                        for row in m.buttons:
-                            for btn in row:
-                                if "перенести" in (btn.text or "").lower():
-                                    balance_msg = m
-                                    break
-                if balance_msg:
-                    break
-            if balance_msg:
-                break
-
-        if current_bal is not None and current_bal < min_withdraw:
-            return False
-        if not balance_msg:
-            return False
-
-        clicked_transfer = False
-        for row_idx, row in enumerate(balance_msg.buttons):
-            for col_idx, btn in enumerate(row):
-                if "перенести" in (btn.text or "").lower():
-                    await balance_msg.click(row_idx, col_idx)
-                    clicked_transfer = True
-                    break
-            if clicked_transfer:
-                break
-
-        if not clicked_transfer:
-            return False
-
-        prompt_ready = False
-        for _ in range(16):
-            await asyncio.sleep(0.15)
-            msgs = await client.get_messages(peer, limit=4)
-            for m in msgs:
-                if m.out or m.id < balance_msg.id:
-                    continue
-                txt_low = (m.text or "").lower()
-                if any(w in txt_low for w in ["минимальн", "недостаточно", "ошибка", "недоступ"]):
-                    return False
-                if m.id > balance_msg.id or m.edit_date:
-                    if any(w in txt_low for w in ["введите id", "введите логин", "укажите id", "id пользователя"]):
-                        prompt_ready = True
+                balance_msg = None
+                current_bal = None
+                for _ in range(16):
+                    await asyncio.sleep(0.15)
+                    msgs = await client.get_messages(peer, limit=4)
+                    for m in msgs:
+                        if m.id > cmd.id and not m.out:
+                            b_str = parse_balance_from_text(m.text or "")
+                            if b_str is not None:
+                                try:
+                                    current_bal = float(b_str)
+                                except ValueError:
+                                    pass
+                            if m.buttons:
+                                for row in m.buttons:
+                                    for btn in row:
+                                        if "перенести" in (btn.text or "").lower():
+                                            balance_msg = m
+                                            break
+                        if balance_msg:
+                            break
+                    if balance_msg or (current_bal is not None and current_bal < min_withdraw):
                         break
-            if prompt_ready:
-                break
 
-        if not prompt_ready:
-            return False
+                if current_bal is not None and current_bal < min_withdraw:
+                    return False
+                if not balance_msg:
+                    return False
 
-        sent_login = await client.send_message(peer, site_login)
-        confirm_msg = None
-        for _ in range(16):
-            await asyncio.sleep(0.15)
-            msgs = await client.get_messages(peer, limit=4)
-            for m in msgs:
-                if m.id > sent_login.id and not m.out and m.buttons:
-                    for row in m.buttons:
-                        for btn in row:
-                            if "подтвердить" in (btn.text or "").lower():
-                                confirm_msg = m
+                clicked_transfer = False
+                for row_idx, row in enumerate(balance_msg.buttons):
+                    for col_idx, btn in enumerate(row):
+                        if "перенести" in (btn.text or "").lower():
+                            await balance_msg.click(row_idx, col_idx)
+                            clicked_transfer = True
+                            break
+                    if clicked_transfer:
+                        break
+
+                if not clicked_transfer:
+                    return False
+
+                prompt_ready = False
+                for _ in range(16):
+                    await asyncio.sleep(0.15)
+                    msgs = await client.get_messages(peer, limit=4)
+                    for m in msgs:
+                        if m.out or m.id < balance_msg.id:
+                            continue
+                        txt_low = (m.text or "").lower()
+                        if any(w in txt_low for w in ["минимальн", "недостаточно", "ошибка", "недоступ"]):
+                            return False
+                        if m.id > balance_msg.id or m.edit_date:
+                            if any(w in txt_low for w in ["введите id", "введите логин", "укажите id", "id пользователя"]):
+                                prompt_ready = True
                                 break
-                if confirm_msg:
-                    break
-            if confirm_msg:
-                break
+                    if prompt_ready:
+                        break
 
-        if not confirm_msg:
-            return False
+                if not prompt_ready:
+                    return False
 
-        for row_idx, row in enumerate(confirm_msg.buttons):
-            for col_idx, btn in enumerate(row):
-                if "подтвердить" in (btn.text or "").lower():
-                    await confirm_msg.click(row_idx, col_idx)
-                    break
+                sent_login = await client.send_message(peer, site_login)
+                confirm_msg = None
+                for _ in range(16):
+                    await asyncio.sleep(0.15)
+                    msgs = await client.get_messages(peer, limit=4)
+                    for m in msgs:
+                        if m.id > sent_login.id and not m.out and m.buttons:
+                            for row in m.buttons:
+                                for btn in row:
+                                    if "подтвердить" in (btn.text or "").lower():
+                                        confirm_msg = m
+                                        break
+                        if confirm_msg:
+                            break
+                    if confirm_msg:
+                        break
 
-        withdrawn_val = current_bal if current_bal is not None else min_withdraw
-        print(
-            f"[💸 АВТО-ВЫВОД] [{sess_name}] Успешно выведено {withdrawn_val:.2f} ₽ на сайт (ID: {site_login})!",
-            flush=True,
-        )
+                if not confirm_msg:
+                    return False
 
-        # Обновляем баланс аккаунта в accounts.json и счетчик выводов в config.json
-        accs = load_accounts()
-        for a in accs:
-            if str(a.get("session", "")).strip() == sess_name:
-                a["balance"] = "0.00"
-                a["last_withdrawn_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                break
-        save_accounts(accs)
+                for row_idx, row in enumerate(confirm_msg.buttons):
+                    for col_idx, btn in enumerate(row):
+                        if "подтвердить" in (btn.text or "").lower():
+                            await confirm_msg.click(row_idx, col_idx)
+                            break
 
-        settings = load_settings()
-        settings["total_withdrawn_rub"] = round(float(settings.get("total_withdrawn_rub", 0.0)) + withdrawn_val, 2)
-        settings["total_withdrawn_count"] = int(settings.get("total_withdrawn_count", 0)) + 1
-        save_settings_bot(settings)
+                withdrawn_val = current_bal if current_bal is not None else min_withdraw
+                print(
+                    f"[💸 АВТО-ВЫВОД] [{sess_name}] Успешно выведено {withdrawn_val:.2f} ₽ на сайт (ID: {site_login})!",
+                    flush=True,
+                )
 
-        push_mobile_event(
-            "auto_withdraw",
-            f"💸 Авто-вывод: {withdrawn_val:.2f} ₽",
-            f"Аккаунт {sess_name} автоматически вывел {withdrawn_val:.2f} ₽ на ID {site_login}",
-            badge=f"{withdrawn_val:.0f}₽",
-        )
-        return True
+                # Обновляем баланс аккаунта в accounts.json и счетчик выводов в config.json
+                accs = load_accounts()
+                for a in accs:
+                    if str(a.get("session", "")).strip() == sess_name:
+                        a["balance"] = "0.00"
+                        a["last_withdrawn_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        break
+                save_accounts(accs)
+
+                settings = load_settings()
+                settings["total_withdrawn_rub"] = round(float(settings.get("total_withdrawn_rub", 0.0)) + withdrawn_val, 2)
+                settings["total_withdrawn_count"] = int(settings.get("total_withdrawn_count", 0)) + 1
+                save_settings_bot(settings)
+
+                push_mobile_event(
+                    "auto_withdraw",
+                    f"💸 Авто-вывод: {withdrawn_val:.2f} ₽",
+                    f"Аккаунт {sess_name} автоматически вывел {withdrawn_val:.2f} ₽ на ID {site_login}",
+                    badge=f"{withdrawn_val:.0f}₽",
+                )
+
+                # БЕЗОПАСНАЯ ЗАДЕРЖКА ДЛЯ ЗАЩИТЫ БАЗЫ ДАННЫХ САЙТА ОТ СБОЕВ
+                delay_min = float(settings.get("withdraw_delay_min_sec", 3.5))
+                delay_max = float(settings.get("withdraw_delay_max_sec", 6.5))
+                if delay_min < 1.0:
+                    delay_min = 1.0
+                if delay_max < delay_min:
+                    delay_max = delay_min + 1.0
+                pause_sec = round(random.uniform(delay_min, delay_max), 2)
+                print(
+                    f"[⏳ ЗАЩИТА БАЗЫ САЙТА] Перенос {withdrawn_val:.2f} ₽ завершен! Пауза {pause_sec}с перед следующим переводом во избежание коллизий базы...",
+                    flush=True,
+                )
+                await asyncio.sleep(pause_sec)
+                return True
     except Exception as e:
         print(f"[WARN] [АВТО-ВЫВОД] Ошибка на {sess_name}: {e}", flush=True)
         return False

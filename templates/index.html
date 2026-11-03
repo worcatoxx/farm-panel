@@ -2462,6 +2462,19 @@
                         </div>
                     </div>
 
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                            <label class="text-xs font-medium text-zinc-300 block mb-1">Мин. пауза между аккаунтами (сек)</label>
+                            <input name="withdraw_delay_min_sec" type="number" step="0.5" min="1" max="60" value="{{ settings.withdraw_delay_min_sec or 3.5 }}" class="input-box w-full rounded-xl px-3.5 py-2.5 text-xs text-amber-400 font-mono font-bold outline-none">
+                            <span class="text-[10px] text-zinc-400 mt-0.5 block">Защита от сбоя баланса сайта при массовом выводе</span>
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-zinc-300 block mb-1">Макс. пауза между аккаунтами (сек)</label>
+                            <input name="withdraw_delay_max_sec" type="number" step="0.5" min="1" max="60" value="{{ settings.withdraw_delay_max_sec or 6.5 }}" class="input-box w-full rounded-xl px-3.5 py-2.5 text-xs text-amber-400 font-mono font-bold outline-none">
+                            <span class="text-[10px] text-zinc-400 mt-0.5 block">Случайная задержка (3.5 – 6.5 сек) делает вывод поочередным и безопасным</span>
+                        </div>
+                    </div>
+
                     <!-- ПУШ-УВЕДОМЛЕНИЯ И РАДАР ВАУЧЕРОВ (v3.9) -->
                     <div class="card-sub p-4 rounded-2xl flex flex-col gap-3.5 border border-zinc-800">
                         <div class="flex items-center justify-between gap-3">

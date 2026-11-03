@@ -54,6 +54,8 @@ from bot import (
     DEVICE_PROFILES,
     MOBILE_EVENTS_FILE,
     WARMUP_TRIGGER_FILE,
+    WITHDRAW_LOCK_FILE,
+    InterProcessWithdrawLock,
     _atomic_write_json,
     extract_voucher_from_image,
     extract_voucher_from_message,
@@ -90,6 +92,7 @@ os.makedirs(MIRROR_TRASH_DIR, exist_ok=True)
 os.makedirs(TMP_SESSION_DIR, exist_ok=True)
 
 tg_loop = asyncio.new_event_loop()
+_global_web_withdraw_lock = asyncio.Lock()
 
 
 def _start_tg_loop(loop):
@@ -100,7 +103,7 @@ def _start_tg_loop(loop):
 threading.Thread(target=_start_tg_loop, args=(tg_loop,), daemon=True).start()
 
 
-def run_tg(coro, timeout=180):
+def run_tg(coro, timeout=360):
     future = asyncio.run_coroutine_threadsafe(coro, tg_loop)
     return future.result(timeout=timeout)
 
@@ -216,6 +219,8 @@ def load_settings() -> dict:
         "site_withdraw_login": "",
         "min_withdraw_amount": 30.0,
         "auto_withdraw_enabled": True,
+        "withdraw_delay_min_sec": 3.5,
+        "withdraw_delay_max_sec": 6.5,
         "total_withdrawn_rub": 0.0,
         "total_withdrawn_count": 0,
         "enable_smart_jitter": False,
@@ -1503,13 +1508,21 @@ def check_balance_all_route():
     return redirect("/")
 
 
-# --- Авто-вывод баланса на сайт (Ускоренный турбо-поллинг) ---
-async def _withdraw_acc(acc: dict, target_bot: str, site_login: str, min_withdraw: float, sem: asyncio.Semaphore) -> tuple[str, bool, str, float, str | None]:
+class _NullContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+# --- Авто-вывод баланса на сайт (Ускоренный турбо-поллинг с защитой базы данных) ---
+async def _withdraw_acc(acc: dict, target_bot: str, site_login: str, min_withdraw: float, sem: asyncio.Semaphore | None = None) -> tuple[str, bool, str, float, str | None]:
     s_name = acc["session"]
     if not site_login:
         return s_name, False, "Логин для вывода не указан", 0.0, None
 
-    async with sem:
+    async with (sem or _NullContext()):
         tmp_session, _ = create_temp_web_session(s_name)
         if not tmp_session:
             return s_name, False, "Нет файла сессии", 0.0, None
@@ -1651,34 +1664,78 @@ async def _run_all_withdrawals(target_session: str | None = None) -> dict:
         print("[!] Логин для вывода на сайт не настроен в конфигурации!", flush=True)
         return {"ok": False, "message": "Сначала укажите ID / логин сайта для вывода!", "withdrawn_rub": 0.0, "count": 0}
 
-    accs = load_accounts()
-    sem = asyncio.Semaphore(6)
-    targets = [a for a in accs if not target_session or a.get("session") == target_session]
-    tasks = [_withdraw_acc(a, target_bot, site_login, min_withdraw, sem) for a in targets]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    delay_min = float(settings.get("withdraw_delay_min_sec", 3.5))
+    delay_max = float(settings.get("withdraw_delay_max_sec", 6.5))
+    if delay_min < 1.0:
+        delay_min = 1.0
+    if delay_max < delay_min:
+        delay_max = delay_min + 1.0
 
-    accs_map = {a["session"]: a for a in accs}
-    total_withdrawn_now = 0.0
+    accs = load_accounts()
+    if target_session:
+        targets = [a for a in accs if a.get("session") == target_session]
+    else:
+        def _sort_bal(a):
+            try:
+                return float(str(a.get("balance", "0")).replace(",", "."))
+            except ValueError:
+                return -1.0
+        # Сначала аккаунты с известным балансом >= min_withdraw
+        targets = sorted(accs, key=_sort_bal, reverse=True)
+
+    results = []
+    total_targets = len(targets)
     withdrawn_sessions = []
+    total_withdrawn_now = 0.0
     reasons = []
+    accs_map = {a["session"]: a for a in accs}
     now_str = datetime.now().strftime("%H:%M:%S")
-    for res in results:
-        if isinstance(res, tuple) and len(res) >= 3:
-            s_name, ok, reason = res[0], res[1], res[2]
-            w_amt = float(res[3]) if len(res) >= 4 else 0.0
-            det_bal = res[4] if len(res) >= 5 else None
-            if s_name in accs_map:
-                accs_map[s_name]["last_checked"] = now_str
-                if ok:
-                    accs_map[s_name]["balance"] = "0.00"
-                    accs_map[s_name]["last_withdrawn_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    total_withdrawn_now += w_amt
-                    withdrawn_sessions.append(s_name)
-                else:
-                    if det_bal is not None:
-                        accs_map[s_name]["balance"] = det_bal
-                    if reason:
-                        reasons.append(f"{s_name}: {reason}")
+
+    # Строгая поочередная очередь с задержками для защиты от сбоя базы сайта Virtnumber/SMS-PRO
+    async with _global_web_withdraw_lock:
+        for idx, a in enumerate(targets):
+            s_name = a.get("session", "unknown")
+            async with InterProcessWithdrawLock(WITHDRAW_LOCK_FILE):
+                try:
+                    res = await _withdraw_acc(a, target_bot, site_login, min_withdraw)
+                    results.append(res)
+                    if isinstance(res, tuple) and len(res) >= 3:
+                        s_name_res, ok, reason = res[0], res[1], res[2]
+                        w_amt = float(res[3]) if len(res) >= 4 else 0.0
+                        det_bal = res[4] if len(res) >= 5 else None
+
+                        if s_name_res in accs_map:
+                            accs_map[s_name_res]["last_checked"] = now_str
+                            if ok:
+                                accs_map[s_name_res]["balance"] = "0.00"
+                                accs_map[s_name_res]["last_withdrawn_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                                total_withdrawn_now += w_amt
+                                withdrawn_sessions.append(s_name_res)
+                            else:
+                                if det_bal is not None:
+                                    accs_map[s_name_res]["balance"] = det_bal
+                                if reason:
+                                    reasons.append(f"{s_name_res}: {reason}")
+
+                        if ok:
+                            # Успешный перенос средств! Защитная пауза для коммита в базе данных сайта
+                            if idx < total_targets - 1:
+                                pause_sec = round(random.uniform(delay_min, delay_max), 2)
+                                print(
+                                    f"[⏳ ЗАЩИТА БАЗЫ САЙТА] Успешный перенос {w_amt:.2f} ₽ с {s_name_res} на '{site_login}'! "
+                                    f"Пауза {pause_sec}с перед следующим аккаунтом во избежание коллизий базы...",
+                                    flush=True,
+                                )
+                                await asyncio.sleep(pause_sec)
+                        else:
+                            if idx < total_targets - 1 and total_targets > 1:
+                                await asyncio.sleep(0.3)
+                except Exception as e:
+                    print(f"[!] Ошибка вывода на {s_name}: {e}", flush=True)
+                    results.append((s_name, False, str(e), 0.0, None))
+                    if idx < total_targets - 1 and total_targets > 1:
+                        await asyncio.sleep(0.3)
+
     save_accounts(list(accs_map.values()))
 
     if withdrawn_sessions:
@@ -1694,7 +1751,7 @@ async def _run_all_withdrawals(target_session: str | None = None) -> dict:
         )
         return {
             "ok": True,
-            "message": f"Выведено {total_withdrawn_now:.2f} ₽ на {site_login} ({len(withdrawn_sessions)} акк.)",
+            "message": f"Поочередно выведено {total_withdrawn_now:.2f} ₽ на {site_login} ({len(withdrawn_sessions)} акк.) с безопасными задержками!",
             "withdrawn_rub": total_withdrawn_now,
             "count": len(withdrawn_sessions),
         }
@@ -1990,6 +2047,13 @@ def save_settings_route():
         settings["min_withdraw_amount"] = max(1.0, float(request.form.get("min_withdraw_amount", 30.0)))
     except ValueError:
         settings["min_withdraw_amount"] = 30.0
+
+    try:
+        settings["withdraw_delay_min_sec"] = max(1.0, float(request.form.get("withdraw_delay_min_sec", 3.5)))
+        settings["withdraw_delay_max_sec"] = max(settings["withdraw_delay_min_sec"], float(request.form.get("withdraw_delay_max_sec", 6.5)))
+    except ValueError:
+        settings["withdraw_delay_min_sec"] = 3.5
+        settings["withdraw_delay_max_sec"] = 6.5
 
     try:
         settings["jitter_min_ms"] = max(0, int(request.form.get("jitter_min_ms", 20)))

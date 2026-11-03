@@ -68,7 +68,8 @@ while true; do
             cp -n "$DIR"/*.session "$DATA_DIR"/ 2>/dev/null || true
             cd "$DIR" || exit 1
             git fetch --all
-            git reset --hard origin/main
+            CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
+            git reset --hard "origin/$CUR_BRANCH"
             cp -f "$DIR/farm.sh" /usr/local/bin/farm 2>/dev/null && chmod +x /usr/local/bin/farm || true
             systemctl restart farmbot farmweb
             echo -e "${GREEN}[✓] Код обновлен! Все данные в безопасности в /root/farm_data.${PLAIN}"
