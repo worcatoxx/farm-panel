@@ -1052,6 +1052,7 @@ async def init_client_target(client: TelegramClient, target_bot: str, source_cha
 
 
 async def send_to_bot(client: TelegramClient, target_bot: str, code: str, delay_ms: float = 0):
+    await asyncio.sleep(random.uniform(0.105, 0.130))
     if delay_ms > 0:
         await asyncio.sleep(delay_ms / 1000.0)
 
