@@ -1253,69 +1253,90 @@ def _render_code_verification_page(session_name: str, phone: str, delivery: str,
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="theme-color" content="#141415">
         <title>Подтверждение Telegram — FarmBot</title>
         <link rel="manifest" href="/manifest.json">
         <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
             :root {{
-                --bg-main: #09090b;
-                --bg-card: #111115;
-                --text-main: #f4f4f5;
-                --text-muted: #a1a1aa;
-                --border: #27272a;
-                --accent: #7c3aed;
+                color-scheme: dark;
+                --bg-page: #141415;
+                --bg-card: #19191b;
+                --bg-raised: #232325;
+                --text-primary: #ededed;
+                --text-secondary: #a1a1a6;
+                --text-muted: #85858b;
+                --border-hairline: rgba(237, 237, 237, 0.08);
+                --border-strong: rgba(237, 237, 237, 0.14);
+                --accent: #3b82f6;
+                --accent-hover: #2563eb;
             }}
-            [data-theme="amoled-blue"] {{ --bg-main: #000000; --bg-card: #090A0F; --text-main: #FFFFFF; --text-muted: #7E8B9B; --border: #1A2035; --accent: #2563EB; }}
-            [data-theme="dark-blue"] {{ --bg-main: #0B0F17; --bg-card: #131B2E; --text-main: #F1F5F9; --text-muted: #94A3B8; --border: #233252; --accent: #38BDF8; }}
-            [data-theme="full-blue"] {{ --bg-main: #04152D; --bg-card: #072247; --text-main: #E2F1FF; --text-muted: #7FA6CC; --border: #123E7A; --accent: #00F2FE; }}
-            [data-theme="amoled-emerald"] {{ --bg-main: #000000; --bg-card: #070D0A; --text-main: #ECFDF5; --text-muted: #6EE7B7; --border: #143325; --accent: #10B981; }}
-            [data-theme="sunset-dark"] {{ --bg-main: #0F0A0C; --bg-card: #1A1115; --text-main: #FFF5F5; --text-muted: #A3858E; --border: #331F28; --accent: #F97316; }}
-            [data-theme="light-tech"] {{ --bg-main: #F8FAFC; --bg-card: #FFFFFF; --text-main: #0F172A; --text-muted: #64748B; --border: #E2E8F0; --accent: #2563EB; }}
-            [data-theme="warm-craft"] {{ --bg-main: #EAE6DF; --bg-card: #F4F1EA; --text-main: #1C1B18; --text-muted: #78736A; --border: #D6D0C4; --accent: #FF4F00; }}
-            body {{ background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; }}
-            .font-mono {{ font-family: 'JetBrains Mono', monospace; }}
+            body {{
+                background-color: var(--bg-page);
+                color: var(--text-primary);
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                -webkit-font-smoothing: antialiased;
+            }}
+            .font-mono {{
+                font-family: 'JetBrains Mono', monospace;
+                font-variant-numeric: tabular-nums;
+            }}
+            .console-input {{
+                background-color: var(--bg-raised);
+                border: 1px solid var(--border-hairline);
+                color: var(--text-primary);
+                transition: border-color 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1);
+            }}
+            .console-input::placeholder {{
+                color: var(--text-muted);
+            }}
+            .console-input:focus {{
+                outline: none;
+                border-color: var(--accent);
+                box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.22);
+            }}
         </style>
-        <script>
-            (function() {{
-                const t = localStorage.getItem('farm_theme') || 'default-violet';
-                if (t !== 'default-violet') document.documentElement.setAttribute('data-theme', t);
-            }})();
-        </script>
     </head>
     <body class="flex items-center justify-center min-h-screen p-4">
-        <div style="background: var(--bg-card); border: 1px solid var(--border);" class="p-6 sm:p-8 rounded-2xl max-w-md w-full shadow-2xl">
+        <main style="background: var(--bg-card); border: 1px solid var(--border-hairline);" class="p-6 sm:p-7 rounded-[12px] max-w-md w-full">
             <div class="flex items-center gap-3.5 mb-5">
-                <div style="background: var(--accent);" class="w-11 h-11 rounded-xl flex items-center justify-center text-white">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                <div style="background: var(--bg-raised); border: 1px solid var(--border-strong); color: #60a5fa;" class="w-10 h-10 rounded-[8px] flex items-center justify-center shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                 </div>
-                <div>
-                    <h2 class="text-base font-bold">Подтверждение входа</h2>
-                    <p style="color: var(--text-muted);" class="text-xs">Сессия: <span class="font-mono font-semibold" style="color: var(--text-main);">{html.escape(session_name)}</span></p>
+                <div class="min-w-0">
+                    <h1 class="text-[16px] font-semibold tracking-[-0.015em] text-[#ededed]">Подтверждение входа</h1>
+                    <p class="text-[12px] text-[#85858b] mt-0.5 truncate">Сессия: <span class="font-mono font-medium text-[#ededed]">{html.escape(session_name)}</span></p>
                 </div>
             </div>
-            <div style="background: var(--bg-main); border: 1px solid var(--border);" class="rounded-xl p-3.5 mb-4 text-xs space-y-1">
-                <p style="color: var(--text-muted);">Номер телефона: <span style="color: var(--accent);" class="font-mono font-semibold">{html.escape(phone)}</span></p>
-                <p class="text-amber-500">Способ доставки: <b>{html.escape(delivery)}</b></p>
+            <div style="background: var(--bg-page); border: 1px solid var(--border-hairline);" class="rounded-[8px] p-3.5 mb-4 text-[12px] space-y-1.5">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-[#85858b]">Телефон</span>
+                    <span class="font-mono font-medium text-[#ededed]">{html.escape(phone)}</span>
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-[#85858b]">Доставка кода</span>
+                    <span style="color: #e5a93c;" class="font-medium">{html.escape(delivery)}</span>
+                </div>
             </div>
             {err_block}
-            <form action="/finish-phone-login" method="post" class="flex flex-col gap-4">
+            <form action="/finish-phone-login" method="post" class="flex flex-col gap-3.5">
                 <input type="hidden" name="session_name" value="{html.escape(session_name)}">
                 <div>
-                    <label style="color: var(--text-muted);" class="text-xs font-medium block mb-1.5">Код из Telegram или SMS</label>
-                    <input name="code" placeholder="12345" autofocus style="background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main);" class="w-full rounded-xl p-3 text-sm outline-none font-mono tracking-widest">
+                    <label for="tg-code-input" class="text-[12px] font-medium text-[#a1a1a6] block mb-1.5">Код из Telegram или SMS</label>
+                    <input id="tg-code-input" name="code" placeholder="12345" autocomplete="one-time-code" inputmode="numeric" autofocus class="console-input w-full rounded-[8px] px-3 py-2.5 text-[14px] font-mono tracking-widest">
                 </div>
                 <div>
-                    <label style="color: var(--text-muted);" class="text-xs font-medium block mb-1.5">Облачный пароль 2FA (если установлен)</label>
-                    <input name="password" type="password" placeholder="Введите пароль 2FA при наличии" style="background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main);" class="w-full rounded-xl p-3 text-xs outline-none">
+                    <label for="tg-2fa-input" class="text-[12px] font-medium text-[#a1a1a6] block mb-1.5">Облачный пароль 2FA (если установлен)</label>
+                    <input id="tg-2fa-input" name="password" type="password" placeholder="Введите пароль 2FA при наличии" autocomplete="current-password" class="console-input w-full rounded-[8px] px-3 py-2.5 text-[13px]">
                 </div>
-                <button type="submit" style="background-color: var(--accent);" class="mt-1 w-full hover:opacity-95 font-semibold py-3 rounded-xl text-xs text-white transition shadow-lg cursor-pointer">
+                <button type="submit" class="mt-1 w-full bg-[#3b82f6] hover:bg-[#2563eb] font-medium py-2.5 px-4 rounded-[8px] text-[13px] text-white transition-colors cursor-pointer">
                     Подтвердить и подключить
                 </button>
-                <a href="/" style="color: var(--text-muted);" class="text-center text-xs hover:underline mt-1 block">Вернуться в панель управления</a>
+                <a href="/" class="text-center text-[12px] text-[#85858b] hover:text-[#ededed] transition-colors mt-1 block">Вернуться в панель управления</a>
             </form>
-        </div>
+        </main>
     </body>
     </html>
     """
