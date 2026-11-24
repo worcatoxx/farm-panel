@@ -902,11 +902,12 @@
                             <div class="collapsible-inner">
                                 {% if group.accounts %}
                                 <div tabindex="0" role="region" aria-label="Аккаунты {{ group.ip }}" class="overflow-x-auto">
-                                    <table class="w-full text-left text-[13px] min-w-[640px]">
+                                    <table class="w-full text-left text-[13px] min-w-[760px]">
                                         <thead>
                                             <tr class="text-xs text-[#85858b] border-b border-white/[0.06] bg-[#141415]/50">
                                                 <th scope="col" class="py-2.5 px-4 font-medium">Профиль / Устройство</th>
                                                 <th scope="col" class="py-2.5 px-3 font-medium">Телефон</th>
+                                                <th scope="col" class="py-2.5 px-3 font-medium">Канал / Прокси</th>
                                                 <th scope="col" class="py-2.5 px-3 font-medium">Пинг DC</th>
                                                 <th scope="col" class="py-2.5 px-3 font-medium">Баланс</th>
                                                 <th scope="col" class="py-2.5 px-4 font-medium text-right">Действия</th>
@@ -932,6 +933,22 @@
                                                     <button type="button" onclick="copyTextValue('{{ acc.phone or '' }}', 'Телефон')" class="mask-privacy text-[#a1a1a6] hover:text-[#ededed] cursor-pointer" title="Скопировать номер">
                                                         {{ acc.phone or '—' }}
                                                     </button>
+                                                </td>
+                                                <td class="py-2.5 px-3">
+                                                    {% set cur_bind = acc.bind_ip or '' %}
+                                                    {% set bind_hit = namespace(found=false) %}
+                                                    <form action="/accounts/change-ip" method="post" class="m-0">
+                                                        <input type="hidden" name="session_name" value="{{ acc.session }}">
+                                                        <select name="bind_ip" onchange="this.form.submit()" aria-label="Канал для {{ acc.session }}" class="field-input h-7 px-2 text-[11px] font-mono max-w-[210px] mask-privacy cursor-pointer">
+                                                            {% for ip_opt in available_ips %}
+                                                                {% if cur_bind == ip_opt.val %}{% set bind_hit.found = true %}{% endif %}
+                                                                <option value="{{ ip_opt.val }}" {% if cur_bind == ip_opt.val %}selected{% endif %}>{{ ip_opt.label }}</option>
+                                                            {% endfor %}
+                                                            {% if cur_bind and not bind_hit.found %}
+                                                                <option value="{{ cur_bind }}" selected>{{ cur_bind }}</option>
+                                                            {% endif %}
+                                                        </select>
+                                                    </form>
                                                 </td>
                                                 <td id="ping-{{ acc.session }}" class="py-2.5 px-3 font-mono text-xs whitespace-nowrap">
                                                     {% if acc.ping and acc.ping not in ['-', 'err', 'no-file', 'unauth'] %}
@@ -2932,6 +2949,7 @@
                     }
                     if (updateSelect) {
                         document.querySelectorAll('select[name="bind_ip"]').forEach(sel => {
+                            const prevVal = sel.value;
                             Array.from(sel.options).filter(o => o.value.startsWith('socks5://')).forEach(o => o.remove());
                             d.proxies.forEach(pr => {
                                 const opt = document.createElement('option');
@@ -2939,6 +2957,9 @@
                                 opt.textContent = pr.label;
                                 sel.appendChild(opt);
                             });
+                            if (prevVal && Array.from(sel.options).some(o => o.value === prevVal)) {
+                                sel.value = prevVal;
+                            }
                         });
                         showToast(`Загружено ${d.proxies.length} VPN-прокси`);
                     }

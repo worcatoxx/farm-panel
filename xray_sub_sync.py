@@ -601,7 +601,7 @@ async def watchdog_daemon(args, base_port: int, interval: int, recheck: int):
     pool_size = meta["target_size"]
     print(f"[*] Watchdog (tier={meta['tier']}, friends={meta['friends']}, size={pool_size}): проверка {interval}с, повтор {recheck}с", flush=True)
     slots = {int(ps): info for ps, info in prev_slots.items() if info.get("outbound")}
-    cached, last_fetch, last_hb = [], 0.0, 0.0
+    cached, last_fetch, last_hb, last_ping_save = [], 0.0, 0.0, time.time()
     last_mtime = os.path.getmtime(PROXIES_STATE_FILE) if os.path.exists(PROXIES_STATE_FILE) else 0.0
     last_sub_url = meta["sub_url"]
     synced_sig = (meta["sub_url"], pool_size) if (slots and len(slots) >= pool_size) else None
@@ -713,8 +713,23 @@ async def watchdog_daemon(args, base_port: int, interval: int, recheck: int):
                     )
                     verified = await verify_cands_batched([n for n, _ in cands_tcp], batch_size=45)
                     spares = [n for n in filter_for_tier(verified, meta["tier"], meta["friends"], reserved) if n["exit_ip"] not in used_exit and n["address"] not in used_addr]
+                    if not spares and (time.time() - last_fetch) > 60:
+                        try:
+                            fresh = parse_subscription(fetch_subscription(meta["sub_url"], meta["hwid"]))
+                            if fresh:
+                                cached = fresh; last_fetch = time.time()
+                                cands_tcp = sorted(
+                                    [(n, ms) for n, ms in await asyncio.gather(*[tcp_probe(n, s_tcp) for n in cached if n["address"] not in used_addr and n["address"] not in reserved]) if ms is not None],
+                                    key=lambda x: x[1],
+                                )
+                                verified = await verify_cands_batched([n for n, _ in cands_tcp], batch_size=45)
+                                spares = [n for n in filter_for_tier(verified, meta["tier"], meta["friends"], reserved) if n["exit_ip"] not in used_exit and n["address"] not in used_addr]
+                        except Exception:
+                            pass
+                    bound_ports = _load_bound_proxy_ports()
+                    prioritized_bad = sorted(bad_ports, key=lambda dp: (0 if dp in bound_ports else 1, dp))
                     changed = False
-                    for dp in sorted(bad_ports):
+                    for dp in prioritized_bad:
                         if not spares:
                             break
                         prev_ms = bad_ports[dp]
@@ -728,7 +743,12 @@ async def watchdog_daemon(args, base_port: int, interval: int, recheck: int):
                     if changed:
                         save_and_apply(meta, slots)
                         last_mtime = os.path.getmtime(PROXIES_STATE_FILE) if os.path.exists(PROXIES_STATE_FILE) else 0.0
+                        last_ping_save = time.time()
                         await asyncio.sleep(3)
+            if slots and (time.time() - last_ping_save) >= 180:
+                save_and_apply(meta, slots)
+                last_mtime = os.path.getmtime(PROXIES_STATE_FILE) if os.path.exists(PROXIES_STATE_FILE) else 0.0
+                last_ping_save = time.time()
         except Exception as e:
             print(f"[WATCHDOG-ERR] {e}", flush=True)
         await asyncio.sleep(interval)

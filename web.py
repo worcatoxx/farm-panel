@@ -1700,6 +1700,29 @@ async def _check_all_balances(target_session: str | None = None, trigger_autowit
             await _run_all_withdrawals(s_auto)
 
 
+@app.route("/accounts/change-ip", methods=["POST"])
+def change_account_ip_route():
+    s_target = sanitize_session_name(request.form.get("session_name", ""))
+    new_bind = str(request.form.get("bind_ip", "") or "").strip()
+    if not s_target:
+        if _is_ajax_request():
+            return jsonify({"ok": False, "error": "Сессия не указана"}), 400
+        return redirect("/")
+    accs = load_accounts()
+    updated = False
+    for a in accs:
+        if sanitize_session_name(a.get("session", "")) == s_target:
+            a["bind_ip"] = new_bind
+            updated = True
+            break
+    if updated:
+        save_accounts(accs)
+    if _is_ajax_request():
+        lbl = new_bind if new_bind else "Основной IP"
+        return jsonify(_build_dashboard_ajax_summary(f"Канал {s_target} → {lbl}", ok=updated))
+    return redirect("/")
+
+
 @app.route("/accounts/check-balance", methods=["POST"])
 def check_balance_route():
     target_session = request.form.get("session_name", "").strip() or None
