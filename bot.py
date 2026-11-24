@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import io
 import json
+import logging
 import operator
 import random
 import re
@@ -144,6 +145,48 @@ os.makedirs(os.path.join(BASE_DIR, "trash"), exist_ok=True)
 VOUCHERS_HISTORY_FILE = os.path.join(DATA_DIR, "vouchers_history.json")
 MOBILE_EVENTS_FILE = os.path.join(DATA_DIR, "mobile_events.json")
 WARMUP_TRIGGER_FILE = os.path.join(DATA_DIR, "warmup_trigger.flag")
+NET_PROXY_LOG_FILE = os.path.join(DATA_DIR, "net_proxy.log")
+
+
+def _append_net_proxy_line(line: str):
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        if os.path.exists(NET_PROXY_LOG_FILE) and os.path.getsize(NET_PROXY_LOG_FILE) > 1_048_576:
+            bak1 = f"{NET_PROXY_LOG_FILE}.1"
+            bak2 = f"{NET_PROXY_LOG_FILE}.2"
+            if os.path.exists(bak2):
+                os.remove(bak2)
+            if os.path.exists(bak1):
+                os.replace(bak1, bak2)
+            os.replace(NET_PROXY_LOG_FILE, bak1)
+        with open(NET_PROXY_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line.rstrip("\r\n") + "\n")
+    except Exception:
+        pass
+
+
+def log_net_proxy(message: str, level: str = "WARN"):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _append_net_proxy_line(f"[{ts}] [{level}] {message}")
+
+
+class _NetProxyLogHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord):
+        try:
+            msg = self.format(record)
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _append_net_proxy_line(f"[{ts}] [{record.levelname}] {msg}")
+        except Exception:
+            pass
+
+
+_telethon_logger = logging.getLogger("telethon")
+_telethon_logger.setLevel(logging.INFO)
+_telethon_logger.propagate = False
+if not any(isinstance(h, _NetProxyLogHandler) for h in _telethon_logger.handlers):
+    _tl_handler = _NetProxyLogHandler()
+    _tl_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+    _telethon_logger.addHandler(_tl_handler)
 
 FATAL_ERROR_TYPES = (
     UserDeactivatedError,
@@ -2426,9 +2469,8 @@ async def connect_single_account(
         if is_fatal_account_error(e):
             fatal_death_reason = f"Бан / Сброс сессии: {e}"
         else:
-            print(
-                f"[WARN] Сессия {session_name} временно недоступна (сеть/таймаут): {e}",
-                flush=True,
+            log_net_proxy(
+                f"Сессия {session_name} временно недоступна (сеть/таймаут): {e}"
             )
 
     if not is_alive:
@@ -2658,7 +2700,7 @@ async def keep_alive_and_hot_reload():
                         except Exception:
                             pass
                     else:
-                        print(f"[WARN] Временная сетевая ошибка на {sess_name}: {err_msg}", flush=True)
+                        log_net_proxy(f"Временная сетевая ошибка на {sess_name}: {err_msg}")
 
 
 

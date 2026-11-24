@@ -19,4 +19,5 @@ __pycache__/
 .xray_sync.lock
 warmup_trigger.flag
 *.log
+net_proxy.log*
 *.tmp

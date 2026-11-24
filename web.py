@@ -55,6 +55,7 @@ from bot import (
     BUILD_EDITION,
     DEVICE_PROFILES,
     MOBILE_EVENTS_FILE,
+    NET_PROXY_LOG_FILE,
     WARMUP_TRIGGER_FILE,
     WITHDRAW_LOCK_FILE,
     InterProcessWithdrawLock,
@@ -2451,6 +2452,20 @@ def _clean_journal_output(raw_out: str) -> str:
         "Started FarmBot",
         "Starting FarmBot",
         "Stopping FarmBot",
+        "Server closed the connection:",
+        "bytes read on a total of",
+        "Could not connect to proxy",
+        "Connect call failed",
+        "Connecting to ",
+        "Connection to ",
+        "Attempt 1 at connecting",
+        "Attempt 2 at connecting",
+        "Attempt 3 at connecting",
+        "Attempt 4 at connecting",
+        "Attempt 5 at connecting",
+        "Attempt 6 at connecting",
+        "Временная сетевая ошибка",
+        "временно недоступна (сеть/таймаут)",
     )
     for line in raw_out.splitlines():
         if any(np in line for np in noise_patterns):
@@ -2467,8 +2482,19 @@ def _clean_journal_output(raw_out: str) -> str:
 def get_logs():
     unit = request.args.get("unit", "farmbot")
     show_raw = request.args.get("raw", "0") == "1"
-    if unit not in ("farmbot", "farmweb", "xray-farm", "xray-watchdog"):
+    if unit not in ("farmbot", "farmweb", "xray-farm", "xray-watchdog", "net-proxy"):
         unit = "farmbot"
+
+    if unit == "net-proxy":
+        try:
+            if os.path.exists(NET_PROXY_LOG_FILE):
+                with open(NET_PROXY_LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.read().splitlines()
+                tail = "\n".join(lines[-100:])
+                return jsonify({"logs": tail or "Сетевой лог прокси пока пуст."})
+        except Exception as e:
+            return jsonify({"logs": f"Ошибка чтения сетевого лога: {e}"})
+        return jsonify({"logs": "Сетевой журнал прокси пока пуст — временные реконнекты и обрывы Telethon будут писаться сюда."})
 
     if os.name == "nt":
         return jsonify({

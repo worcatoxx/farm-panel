@@ -1658,6 +1658,7 @@
                                 <button type="button" onclick="switchLogUnit('farmweb')" id="log-unit-farmweb" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">farmweb</button>
                                 <button type="button" onclick="switchLogUnit('xray-farm')" id="log-unit-xray-farm" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">xray-farm</button>
                                 <button type="button" onclick="switchLogUnit('xray-watchdog')" id="log-unit-xray-watchdog" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">xray-watchdog</button>
+                                <button type="button" onclick="switchLogUnit('net-proxy')" id="log-unit-net-proxy" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">net-proxy</button>
                             </div>
                         </div>
 
@@ -2690,7 +2691,7 @@
         // =====================================================================
         function switchLogUnit(unit) {
             currentLogUnit = unit;
-            ['farmbot', 'farmweb', 'xray-farm', 'xray-watchdog'].forEach(u => {
+            ['farmbot', 'farmweb', 'xray-farm', 'xray-watchdog', 'net-proxy'].forEach(u => {
                 const b = document.getElementById('log-unit-' + u);
                 if (!b) return;
                 b.className = u === unit
