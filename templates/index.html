@@ -15,26 +15,133 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        (function () {
+            try {
+                const t = localStorage.getItem('farm_ui_theme') || '';
+                if (t === 'carbon-signal') {
+                    document.documentElement.setAttribute('data-theme', 'carbon-signal');
+                    const mc = document.querySelector('meta[name="theme-color"]');
+                    if (mc) mc.setAttribute('content', '#0d0e11');
+                }
+                if (localStorage.getItem('farm_motion_mode') === 'turbo') {
+                    document.documentElement.setAttribute('data-motion', 'turbo');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
+            color-scheme: dark;
+            interpolate-size: allow-keywords;
             --bg-sidebar: #0f0f10;
             --bg-page: #141415;
             --bg-card: #19191b;
             --bg-raised: #232325;
+            --bg-hover: rgba(255, 255, 255, 0.04);
             --border: rgba(237, 237, 237, 0.08);
             --border-hover: rgba(237, 237, 237, 0.16);
             --text-primary: #ededed;
             --text-secondary: #a1a1a6;
             --text-muted: #85858b;
             --accent: #3b82f6;
+            --accent-hover: #2563eb;
             --accent-text: #60a5fa;
             --accent-ring: rgba(59, 130, 246, 0.25);
+            --accent-soft: rgba(59, 130, 246, 0.12);
+            --accent-border: rgba(59, 130, 246, 0.28);
             --positive: #4cc38a;
             --warning: #e5a93c;
             --negative: #e5484d;
             --ease: cubic-bezier(0.22, 1, 0.36, 1);
+            --dur-fast: 150ms;
+            --dur-med: 250ms;
+            --dur-slow: 360ms;
+            --card-shadow: none;
+            --btn-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
+
+        :root[data-motion="turbo"] {
+            --dur-fast: 90ms;
+            --dur-med: 145ms;
+            --dur-slow: 205ms;
+        }
+
+        /* Секретный стиль: Carbon Signal (тактильный вольфрам и сигнальный янтарь) */
+        html[data-theme="carbon-signal"] {
+            --bg-sidebar: #090a0c;
+            --bg-page: #0d0e11;
+            --bg-card: #131519;
+            --bg-raised: #1a1d24;
+            --bg-hover: rgba(244, 241, 234, 0.045);
+            --border: rgba(244, 241, 234, 0.09);
+            --border-hover: rgba(234, 126, 30, 0.34);
+            --text-primary: #f4f1ea;
+            --text-secondary: #aba9a0;
+            --text-muted: #91908a;
+            --accent: #ea7e1e;
+            --accent-hover: #d36b11;
+            --accent-text: #f6ad55;
+            --accent-ring: rgba(234, 126, 30, 0.28);
+            --accent-soft: rgba(234, 126, 30, 0.14);
+            --accent-border: rgba(234, 126, 30, 0.34);
+            --positive: #3fd88f;
+            --warning: #f0b443;
+            --negative: #f05252;
+            --card-shadow: inset 0 1px 0 rgba(244, 241, 234, 0.055), 0 10px 28px rgba(0, 0, 0, 0.34);
+            --btn-bevel: inset 0 1px 0 rgba(244, 241, 234, 0.08), 0 1px 0 rgba(0, 0, 0, 0.45);
+        }
+
+        html[data-theme="carbon-signal"] body {
+            background-image: radial-gradient(rgba(244, 241, 234, 0.055) 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: -1px -1px;
+        }
+
+        html[data-theme="carbon-signal"] .sidebar-rail {
+            background-image: linear-gradient(180deg, #0b0c0f 0%, #08090b 100%);
+        }
+
+        html[data-theme="carbon-signal"] .card-surface {
+            box-shadow: var(--card-shadow);
+        }
+
+        html[data-theme="carbon-signal"] .nav-item.active {
+            background: linear-gradient(180deg, rgba(244, 241, 234, 0.05) 0%, rgba(244, 241, 234, 0.015) 100%);
+            border-color: rgba(244, 241, 234, 0.12);
+            box-shadow: inset 3px 0 0 var(--accent), inset 0 1px 0 rgba(244, 241, 234, 0.07);
+        }
+
+        html[data-theme="carbon-signal"] .btn-primary {
+            background-color: var(--text-primary);
+            color: var(--bg-sidebar);
+            box-shadow: inset 0 1px 0 #ffffff, 0 2px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        html[data-theme="carbon-signal"] .btn-surface {
+            box-shadow: var(--btn-bevel);
+        }
+
+        /* Согласование Tailwind-утилит в секретной теме (специфичность 0-2-1 выше Tailwind) */
+        html[data-theme="carbon-signal"] .text-\[\#ededed\] { color: var(--text-primary); }
+        html[data-theme="carbon-signal"] .text-\[\#a1a1a6\] { color: var(--text-secondary); }
+        html[data-theme="carbon-signal"] .text-\[\#85858b\] { color: var(--text-muted); }
+        html[data-theme="carbon-signal"] .text-\[\#60a5fa\] { color: var(--accent-text); }
+        html[data-theme="carbon-signal"] .text-\[\#4cc38a\] { color: var(--positive); }
+        html[data-theme="carbon-signal"] .text-\[\#e5a93c\] { color: var(--warning); }
+        html[data-theme="carbon-signal"] .text-\[\#e5484d\] { color: var(--negative); }
+        html[data-theme="carbon-signal"] .bg-\[\#0f0f10\] { background-color: var(--bg-sidebar); }
+        html[data-theme="carbon-signal"] .bg-\[\#141415\] { background-color: var(--bg-page); }
+        html[data-theme="carbon-signal"] .bg-\[\#232325\] { background-color: var(--bg-raised); }
+        html[data-theme="carbon-signal"] .bg-\[\#3b82f6\] { background-color: var(--accent); }
+        html[data-theme="carbon-signal"] .border-\[\#3b82f6\] { border-color: var(--accent); }
+        html[data-theme="carbon-signal"] .accent-\[\#3b82f6\] { accent-color: var(--accent); }
+        html[data-theme="carbon-signal"] .hover\:text-\[\#60a5fa\]:hover,
+        html[data-theme="carbon-signal"] .group:hover .group-hover\:text-\[\#60a5fa\] { color: var(--accent-text); }
+        html[data-theme="carbon-signal"] .hover\:border-\[\#3b82f6\]:hover { border-color: var(--accent); }
+        html[data-theme="carbon-signal"] .bg-\[\#3b82f6\]\/10 { background-color: var(--accent-soft); }
+        html[data-theme="carbon-signal"] .border-\[\#3b82f6\]\/25 { border-color: var(--accent-border); }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -45,6 +152,7 @@
             color: var(--text-primary);
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             -webkit-font-smoothing: antialiased;
+            transition: background-color var(--dur-slow) var(--ease), color var(--dur-med) var(--ease);
         }
 
         .font-mono {
@@ -80,12 +188,14 @@
             background-color: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: 12px;
+            transition: background-color var(--dur-med) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease);
         }
 
         .card-sub {
             background-color: var(--bg-page);
             border: 1px solid var(--border);
             border-radius: 8px;
+            transition: background-color var(--dur-med) var(--ease), border-color var(--dur-fast) var(--ease);
         }
 
         .field-input {
@@ -93,7 +203,7 @@
             border: 1px solid var(--border);
             color: var(--text-primary);
             border-radius: 8px;
-            transition: border-color 150ms var(--ease), background-color 150ms var(--ease);
+            transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
         }
         .field-input::placeholder { color: var(--text-muted); }
         .field-input:hover { border-color: var(--border-hover); }
@@ -169,14 +279,14 @@
         .btn-primary:active { transform: scale(0.98); }
 
         .btn-accent {
-            background-color: #2563eb;
+            background-color: var(--accent-hover);
             color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 8px;
             font-weight: 500;
-            transition: background-color 150ms var(--ease), transform 120ms var(--ease);
+            transition: background-color var(--dur-fast) var(--ease), transform 120ms var(--ease);
         }
-        .btn-accent:hover { background-color: #1d4ed8; }
+        .btn-accent:hover { background-color: var(--accent); }
         .btn-accent:active { transform: scale(0.98); }
 
         .btn-emerald {
@@ -185,7 +295,7 @@
             border: 1px solid rgba(76, 195, 138, 0.3);
             border-radius: 8px;
             font-weight: 500;
-            transition: background-color 150ms var(--ease), border-color 150ms var(--ease), transform 120ms var(--ease);
+            transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform 120ms var(--ease);
         }
         .btn-emerald:hover {
             background-color: rgba(76, 195, 138, 0.22);
@@ -199,10 +309,11 @@
             color: var(--text-primary);
             border-radius: 8px;
             font-weight: 500;
-            transition: background-color 150ms var(--ease), border-color 150ms var(--ease), transform 120ms var(--ease);
+            transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform 120ms var(--ease);
         }
         .btn-surface:hover {
             background-color: #2a2a2d;
+            background-color: color-mix(in oklab, var(--bg-raised), var(--text-primary) 5%);
             border-color: var(--border-hover);
         }
         .btn-surface:active { transform: scale(0.98); }
@@ -213,7 +324,7 @@
             color: var(--negative);
             border-radius: 8px;
             font-weight: 500;
-            transition: background-color 150ms var(--ease), border-color 150ms var(--ease), transform 120ms var(--ease);
+            transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform 120ms var(--ease);
         }
         .btn-danger-soft:hover {
             background-color: rgba(229, 72, 77, 0.18);
@@ -232,7 +343,7 @@
             font-weight: 500;
             color: var(--text-secondary);
             border: 1px solid transparent;
-            transition: background-color 150ms var(--ease), color 150ms var(--ease), border-color 150ms var(--ease);
+            transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
             cursor: pointer;
             width: 100%;
             text-align: left;
@@ -275,13 +386,13 @@
         }
         .field-input:focus-visible { outline: none; }
 
-        /* Сворачиваемые секции (Accordion) */
+        /* Сворачиваемые секции и раскрывающиеся панели (Accordion / Drawer) */
         .collapsible-wrapper {
             display: grid;
             grid-template-columns: minmax(0, 1fr);
             grid-template-rows: 1fr;
             opacity: 1;
-            transition: grid-template-rows 240ms var(--ease), opacity 180ms var(--ease), margin-top 200ms var(--ease);
+            transition: grid-template-rows var(--dur-slow) var(--ease), opacity var(--dur-med) var(--ease), margin-top var(--dur-med) var(--ease);
         }
         .collapsible-wrapper.is-collapsed {
             grid-template-rows: 0fr;
@@ -289,18 +400,90 @@
             margin-top: 0 !important;
             pointer-events: none;
         }
-        .collapsible-inner { overflow: hidden; min-height: 0; }
-        .collapse-btn svg { transition: transform 200ms var(--ease); }
+        .collapsible-inner {
+            overflow: hidden;
+            min-height: 0;
+            transition: transform var(--dur-slow) var(--ease);
+        }
+        .collapsible-wrapper.is-collapsed > .collapsible-inner {
+            transform: translateY(-4px);
+        }
+        .collapse-btn svg { transition: transform var(--dur-med) var(--ease); }
         .collapse-btn.rotated svg { transform: rotate(-90deg); }
+
+        /* Плавный вход/выход скрываемых блоков, поповеров и оверлеев (@starting-style + [data-closing]) */
+        .anim-panel {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease), display var(--dur-med);
+            transition-behavior: allow-discrete;
+        }
+        .anim-panel.hidden,
+        .anim-panel[data-closing] {
+            opacity: 0;
+            transform: translateY(6px) scale(0.992);
+            pointer-events: none;
+        }
+
+        .anim-popover {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            transform-origin: top right;
+            transition: opacity var(--dur-fast) var(--ease), transform var(--dur-med) var(--ease), display var(--dur-fast);
+            transition-behavior: allow-discrete;
+        }
+        .anim-popover.hidden,
+        .anim-popover[data-closing] {
+            opacity: 0;
+            transform: translateY(-6px) scale(0.96);
+            pointer-events: none;
+        }
+
+        .anim-overlay {
+            opacity: 1;
+            transition: opacity var(--dur-med) var(--ease), display var(--dur-med);
+            transition-behavior: allow-discrete;
+        }
+        .anim-overlay .loading-card {
+            transform: translateY(0) scale(1);
+            transition: transform var(--dur-med) var(--ease), opacity var(--dur-med) var(--ease);
+        }
+        .anim-overlay.hidden,
+        .anim-overlay[data-closing] {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .anim-overlay[data-closing] .loading-card {
+            opacity: 0;
+            transform: translateY(8px) scale(0.96);
+        }
+
+        @starting-style {
+            .anim-panel {
+                opacity: 0;
+                transform: translateY(10px) scale(0.99);
+            }
+            .anim-popover {
+                opacity: 0;
+                transform: translateY(-8px) scale(0.95);
+            }
+            .anim-overlay {
+                opacity: 0;
+            }
+            .anim-overlay .loading-card {
+                opacity: 0;
+                transform: translateY(10px) scale(0.95);
+            }
+        }
 
         /* Режим приватности */
         body.privacy-mode .mask-privacy {
             filter: blur(5px);
             user-select: none;
-            transition: filter 150ms var(--ease);
+            transition: filter var(--dur-fast) var(--ease);
         }
         body.privacy-mode .mask-privacy:hover { filter: blur(0); }
-        body.privacy-mode #logs { filter: blur(5px); user-select: none; }
+        body.privacy-mode #logs { filter: blur(5px); user-select: none; transition: filter var(--dur-fast) var(--ease); }
         body.privacy-mode #logs:hover { filter: blur(0); }
 
         /* Уведомления (Toast и Push-баннер) */
@@ -318,10 +501,10 @@
             align-items: center;
             gap: 8px;
             z-index: 60;
-            transform: translateY(16px);
+            transform: translateY(14px) scale(0.97);
             opacity: 0;
             pointer-events: none;
-            transition: transform 200ms var(--ease), opacity 180ms var(--ease);
+            transition: transform var(--dur-med) var(--ease), opacity var(--dur-fast) var(--ease);
             font-size: 12.5px;
             font-weight: 500;
         }
@@ -329,7 +512,7 @@
             .toast-popup { bottom: 20px; }
         }
         .toast-popup.show {
-            transform: translateY(0);
+            transform: translateY(0) scale(1);
             opacity: 1;
         }
 
@@ -337,7 +520,7 @@
             position: fixed;
             top: 16px;
             left: 50%;
-            transform: translate(-50%, -24px);
+            transform: translate(-50%, -22px) scale(0.97);
             background: var(--bg-card);
             border: 1px solid var(--border-hover);
             border-radius: 12px;
@@ -351,10 +534,10 @@
             max-width: calc(100vw - 24px);
             opacity: 0;
             pointer-events: none;
-            transition: transform 220ms var(--ease), opacity 180ms var(--ease);
+            transition: transform var(--dur-med) var(--ease), opacity var(--dur-fast) var(--ease);
         }
         .live-push-banner.show {
-            transform: translate(-50%, 0);
+            transform: translate(-50%, 0) scale(1);
             opacity: 1;
             pointer-events: auto;
         }
@@ -366,17 +549,30 @@
         }
 
         @keyframes valFlashAnim {
-            0% { color: var(--positive); }
-            100% { color: inherit; }
+            0% { color: var(--positive); transform: translateY(-1px); }
+            100% { color: inherit; transform: translateY(0); }
         }
-        .val-flash { animation: valFlashAnim 500ms var(--ease); }
+        .val-flash { animation: valFlashAnim 480ms var(--ease); }
 
-        @keyframes tabEnter {
-            from { opacity: 0; transform: translateY(6px); }
+        @keyframes cardCascade {
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .tab-entering { animation: tabEnter 200ms var(--ease) both; }
+        .tab-entering.tab-stagger > * {
+            animation: cardCascade var(--dur-med) var(--ease) both;
+        }
+        .tab-entering.tab-stagger > *:nth-child(1) { animation-delay: 0ms; }
+        .tab-entering.tab-stagger > *:nth-child(2) { animation-delay: 35ms; }
+        .tab-entering.tab-stagger > *:nth-child(3) { animation-delay: 70ms; }
+        .tab-entering.tab-stagger > *:nth-child(4) { animation-delay: 105ms; }
+        .tab-entering.tab-stagger > *:nth-child(5) { animation-delay: 140ms; }
+        .tab-entering.tab-stagger > *:nth-child(n+6) { animation-delay: 175ms; }
 
+        .item-enter {
+            animation: cardCascade var(--dur-med) var(--ease) both;
+        }
+
+        /* Диалог в top-layer: плавное появление и закрытие (@starting-style + allow-discrete + fallback) */
         dialog.console-dialog {
             background-color: var(--bg-card);
             color: var(--text-primary);
@@ -386,10 +582,38 @@
             max-width: 480px;
             width: calc(100% - 32px);
             margin: auto;
+            opacity: 0;
+            transform: scale(0.94) translateY(8px);
+            transition-property: opacity, transform, display, overlay;
+            transition-duration: var(--dur-med);
+            transition-timing-function: var(--ease);
+            transition-behavior: allow-discrete;
+        }
+        dialog.console-dialog[open]:where(:not([data-closing])) {
+            opacity: 1;
+            transform: scale(1) translateY(0);
         }
         dialog.console-dialog::backdrop {
-            background: rgba(9, 9, 11, 0.78);
+            background-color: rgba(9, 9, 11, 0);
+            backdrop-filter: blur(0px);
+            transition-property: background-color, backdrop-filter, display, overlay;
+            transition-duration: var(--dur-med);
+            transition-timing-function: var(--ease);
+            transition-behavior: allow-discrete;
+        }
+        dialog.console-dialog[open]:where(:not([data-closing]))::backdrop {
+            background-color: rgba(9, 9, 11, 0.78);
             backdrop-filter: blur(4px);
+        }
+        @starting-style {
+            dialog.console-dialog[open]:where(:not([data-closing])) {
+                opacity: 0;
+                transform: scale(0.94) translateY(8px);
+            }
+            dialog.console-dialog[open]:where(:not([data-closing]))::backdrop {
+                background-color: rgba(9, 9, 11, 0);
+                backdrop-filter: blur(0px);
+            }
         }
 
         .skip-link {
@@ -406,10 +630,48 @@
         }
         .skip-link:focus { left: 8px; }
 
+        @media (forced-colors: active) {
+            .card-surface, .card-sub, .field-input, .btn-primary, .btn-surface, .btn-emerald, .btn-danger-soft, dialog.console-dialog {
+                border: 1px solid ButtonBorder !important;
+            }
+        }
+
+        /* Уважение reduced-motion: убираем пространственные смещения, оставляя мягкие короткие fade/цвет-переходы */
         @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                transition-duration: 0.01ms !important;
+            :root {
+                --dur-fast: 80ms;
+                --dur-med: 100ms;
+                --dur-slow: 120ms;
+            }
+            .anim-panel,
+            .anim-panel.hidden,
+            .anim-panel[data-closing],
+            .anim-popover,
+            .anim-popover.hidden,
+            .anim-popover[data-closing],
+            .anim-overlay .loading-card,
+            .anim-overlay[data-closing] .loading-card,
+            .collapsible-wrapper > .collapsible-inner,
+            .collapsible-wrapper.is-collapsed > .collapsible-inner,
+            .toast-popup,
+            .toast-popup.show,
+            .live-push-banner,
+            .live-push-banner.show,
+            dialog.console-dialog,
+            dialog.console-dialog[open]:where(:not([data-closing])) {
+                transform: none !important;
+            }
+            .tab-entering.tab-stagger > *,
+            .item-enter,
+            .val-flash {
+                animation: none !important;
+            }
+            .btn-primary:active,
+            .btn-accent:active,
+            .btn-emerald:active,
+            .btn-surface:active,
+            .btn-danger-soft:active {
+                transform: none !important;
             }
         }
     </style>
@@ -440,8 +702,8 @@
     </div>
 
     <!-- Модальный индикатор длительных операций -->
-    <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm items-center justify-center p-4">
-        <div class="card-surface p-6 max-w-sm w-full flex flex-col items-center text-center">
+    <div id="loading-overlay" class="anim-overlay hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm items-center justify-center p-4">
+        <div class="loading-card card-surface p-6 max-w-sm w-full flex flex-col items-center text-center">
             <svg class="w-6 h-6 animate-spin text-[#60a5fa] mb-3" aria-hidden="true" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
@@ -637,12 +899,12 @@
                 </div>
             </header>
 
-            <main id="main-content" tabindex="-1" class="flex-1 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 pb-24 lg:pb-8 flex flex-col gap-6 min-w-0">
+            <main id="main-content" tabindex="-1" class="flex-1 w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 pb-24 lg:pb-8 flex flex-col gap-6 min-w-0">
 
                 <!-- ========================================================= -->
                 <!-- 1. ВКЛАДКА: ОБЗОР                                          -->
                 <!-- ========================================================= -->
-                <div id="tab-main" class="flex flex-col gap-5">
+                <div id="tab-main" class="tab-pane anim-panel tab-stagger flex flex-col gap-5">
                     <!-- Заголовок страницы и главные действия -->
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -678,7 +940,7 @@
                                     <span>Кластер ({{ linked_nodes|length }})</span>
                                     <svg id="vps-menu-arrow" class="w-3.5 h-3.5 text-[#85858b] transition-transform" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                                 </button>
-                                <div id="vps-dropdown-menu" class="hidden absolute right-0 top-full mt-1.5 w-60 card-surface p-1.5 shadow-2xl z-40 flex-col gap-1">
+                                <div id="vps-dropdown-menu" class="anim-popover hidden absolute right-0 top-full mt-1.5 w-60 card-surface p-1.5 shadow-2xl z-40 flex-col gap-1">
                                     <form action="/service/restart-all" method="post" class="m-0 ajax-form">
                                         <button type="submit" class="w-full text-left px-3 py-2 rounded-[6px] text-xs text-[#ededed] hover:bg-white/5 transition-colors flex items-center gap-2 cursor-pointer">
                                             <span>Перезапустить все VPS</span>
@@ -752,7 +1014,9 @@
                     </section>
 
                     <!-- Раскрываемая форма добавления аккаунта (открыта по умолчанию при 0 аккаунтах) -->
-                    <section id="add-account-panel" class="{% if total_accounts_count > 0 %}hidden{% endif %} card-surface p-5" aria-label="Добавление аккаунта">
+                    <div id="add-account-wrap" class="collapsible-wrapper {% if total_accounts_count > 0 %}is-collapsed{% endif %}" {% if total_accounts_count > 0 %}aria-hidden="true" inert{% endif %}>
+                        <div class="collapsible-inner">
+                    <section id="add-account-panel" class="card-surface p-5" aria-label="Добавление аккаунта">
                         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
                             <div>
                                 <h2 class="text-sm font-medium text-[#ededed]">Подключение нового аккаунта</h2>
@@ -760,8 +1024,8 @@
                             </div>
                             <div class="flex items-center gap-2">
                                 <div class="inline-flex card-sub p-1 gap-1">
-                                    <button type="button" onclick="switchAddMode('phone')" id="add-mode-phone-btn" class="h-7 px-3 rounded-[6px] text-xs font-medium bg-[#232325] text-[#ededed] cursor-pointer">По телефону</button>
-                                    <button type="button" onclick="switchAddMode('file')" id="add-mode-file-btn" class="h-7 px-3 rounded-[6px] text-xs font-medium text-[#85858b] hover:text-[#ededed] cursor-pointer">Файл .session</button>
+                                    <button type="button" onclick="switchAddMode('phone')" id="add-mode-phone-btn" class="h-7 px-3 rounded-[6px] text-xs font-medium bg-[#232325] text-[#ededed] cursor-pointer transition-colors">По телефону</button>
+                                    <button type="button" onclick="switchAddMode('file')" id="add-mode-file-btn" class="h-7 px-3 rounded-[6px] text-xs font-medium text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors">Файл .session</button>
                                 </div>
                                 {% if total_accounts_count > 0 %}
                                 <button type="button" onclick="toggleAddAccountPanel(false)" aria-label="Скрыть панель добавления" class="btn-surface w-8 h-8 flex items-center justify-center cursor-pointer">
@@ -771,7 +1035,7 @@
                             </div>
                         </div>
 
-                        <form id="add-form-phone" action="/start-phone-login" method="post" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end" onsubmit="showLoading('Запрос кода Telegram', 'Подключаемся к дата-центру и отправляем код')">
+                        <form id="add-form-phone" action="/start-phone-login" method="post" class="anim-panel grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end" onsubmit="showLoading('Запрос кода Telegram', 'Подключаемся к дата-центру и отправляем код')">
                             <div>
                                 <label for="add-phone" class="text-xs text-[#a1a1a6] block mb-1.5">Номер телефона</label>
                                 <input id="add-phone" name="phone" type="tel" placeholder="+79991234567" required class="field-input w-full h-9 px-3 text-xs font-mono mask-privacy">
@@ -792,23 +1056,27 @@
 
                             <div class="sm:col-span-2 lg:col-span-4 pt-1">
                                 <label class="inline-flex items-center gap-2 text-xs text-[#85858b] cursor-pointer select-none">
-                                    <input type="checkbox" class="native-check accent-[#3b82f6]" onchange="document.getElementById('custom-api-fields').classList.toggle('hidden', !this.checked)">
+                                    <input type="checkbox" class="native-check accent-[#3b82f6]" onchange="toggleCustomApiFields(this.checked)">
                                     <span>Указать свои API ID и API Hash</span>
                                 </label>
-                                <div id="custom-api-fields" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-white/[0.08]">
-                                    <div>
-                                        <label for="add-api-id" class="text-xs text-[#85858b] block mb-1">API ID</label>
-                                        <input id="add-api-id" name="api_id" value="2040" class="field-input w-full h-8 px-3 text-xs font-mono">
-                                    </div>
-                                    <div>
-                                        <label for="add-api-hash" class="text-xs text-[#85858b] block mb-1">API Hash</label>
-                                        <input id="add-api-hash" name="api_hash" value="b18441a1ff607e10a989891a5462e627" class="field-input w-full h-8 px-3 text-xs font-mono">
+                                <div id="custom-api-fields" class="collapsible-wrapper is-collapsed" aria-hidden="true" inert>
+                                    <div class="collapsible-inner">
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-white/[0.08]">
+                                            <div>
+                                                <label for="add-api-id" class="text-xs text-[#85858b] block mb-1">API ID</label>
+                                                <input id="add-api-id" name="api_id" value="2040" class="field-input w-full h-8 px-3 text-xs font-mono">
+                                            </div>
+                                            <div>
+                                                <label for="add-api-hash" class="text-xs text-[#85858b] block mb-1">API Hash</label>
+                                                <input id="add-api-hash" name="api_hash" value="b18441a1ff607e10a989891a5462e627" class="field-input w-full h-8 px-3 text-xs font-mono">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </form>
 
-                        <form id="add-form-file" action="/upload-session" method="post" enctype="multipart/form-data" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 items-end" onsubmit="showLoading('Импорт сессий', 'Проверяем валидность файлов .session в Telegram')">
+                        <form id="add-form-file" action="/upload-session" method="post" enctype="multipart/form-data" class="anim-panel hidden grid grid-cols-1 sm:grid-cols-3 gap-3 items-end" onsubmit="showLoading('Импорт сессий', 'Проверяем валидность файлов .session в Telegram')">
                             <div>
                                 <label for="upload-session-files" class="text-xs text-[#a1a1a6] block mb-1.5">Файлы .session</label>
                                 <input id="upload-session-files" type="file" name="session_files" accept=".session" multiple required class="field-input w-full h-9 px-2 py-1 text-xs text-[#a1a1a6] file:mr-3 file:py-1 file:px-2.5 file:rounded-[6px] file:border-0 file:text-xs file:font-medium file:bg-[#ededed] file:text-[#0f0f10] cursor-pointer">
@@ -824,6 +1092,8 @@
                             <button type="submit" class="btn-primary h-9 px-4 text-xs cursor-pointer">Импортировать</button>
                         </form>
                     </section>
+                        </div>
+                    </div>
 
                     <!-- Операционная панель: быстрые инструменты и авто-вывод -->
                     <section class="card-surface p-3.5 flex flex-col xl:flex-row xl:items-center justify-between gap-3" aria-label="Инструменты и авто-вывод">
@@ -1013,7 +1283,7 @@
                 <!-- ========================================================= -->
                 <!-- 2. ВКЛАДКА: ПРОКСИ И СЕТЬ (Xray VPN + Серверы + Ноды)      -->
                 <!-- ========================================================= -->
-                <div id="tab-network" class="hidden flex flex-col gap-5">
+                <div id="tab-network" class="tab-pane anim-panel tab-stagger hidden flex flex-col gap-5">
                     <div>
                         <h1 class="text-2xl font-medium text-[#ededed] tracking-tight">Прокси и сеть</h1>
                         <p class="text-[13px] text-[#85858b] mt-0.5">Управление подпиской Xray SOCKS5, Watchdog нод{% if not is_standard|default(false) %} и откликами серверов{% endif %}</p>
@@ -1043,7 +1313,7 @@
                         <div id="xray-sub-info" class="text-xs font-mono text-[#85858b]">Укажите ссылку подписки — скрипт проверит все узлы и отберёт ТОП самых быстрых с уникальным IP.</div>
 
                         <!-- Компактный ТОП активных портов (заполняется из /api/xray/status) -->
-                        <div id="xray-ports-preview" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 pt-2.5 border-t border-white/[0.08]"></div>
+                        <div id="xray-ports-preview" class="anim-panel hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-1.5 pt-2.5 border-t border-white/[0.08]"></div>
                     </section>
 
                     {% if not is_standard|default(false) %}
@@ -1126,15 +1396,15 @@
                 <!-- ========================================================= -->
                 <!-- 3. ВКЛАДКА: ВАУЧЕРЫ И OCR                                 -->
                 <!-- ========================================================= -->
-                <div id="tab-vouchers" class="hidden flex flex-col gap-5">
+                <div id="tab-vouchers" class="tab-pane anim-panel tab-stagger hidden flex flex-col gap-5">
                     <div>
                         <h1 class="text-2xl font-medium text-[#ededed] tracking-tight">Ваучеры и OCR</h1>
                         <p class="text-[13px] text-[#85858b] mt-0.5">Проверка распознавания фото через RapidOCR ONNX, решение уравнений и журнал перехватов</p>
                     </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                         <!-- Тестер ваучеров -->
-                        <section class="lg:col-span-1 card-surface p-5 flex flex-col gap-4" aria-labelledby="tester-heading">
+                        <section class="lg:col-span-5 xl:col-span-4 card-surface p-5 flex flex-col gap-4" aria-labelledby="tester-heading">
                             <div>
                                 <h2 id="tester-heading" class="text-sm font-medium text-[#ededed]">Тестер парсера и фото OCR</h2>
                                 <p class="text-xs text-[#85858b] mt-0.5">Загрузите картинку, вставьте скриншот (Ctrl+V) или текст поста</p>
@@ -1144,7 +1414,7 @@
                                 <input type="file" id="tester-file-input" accept="image/*" class="hidden" onchange="handleTesterFileSelect(event)">
                                 <div class="text-xs font-medium text-[#ededed]">Загрузить фото или вставить (Ctrl+V)</div>
                                 <div class="text-[11px] text-[#85858b] mt-0.5">PNG, JPG, WEBP</div>
-                                <div id="tester-preview-wrap" class="hidden mt-3 relative inline-block">
+                                <div id="tester-preview-wrap" class="anim-panel hidden mt-3 relative inline-block">
                                     <img id="tester-img-preview" alt="Предпросмотр фото ваучера" class="max-h-24 rounded-[6px] border border-white/10 object-contain">
                                     <button type="button" onclick="event.stopPropagation(); clearTesterPhoto()" aria-label="Удалить фото" class="absolute -top-2 -right-2 bg-[#e5484d] text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] cursor-pointer">×</button>
                                 </div>
@@ -1159,15 +1429,15 @@
 
                             <button type="button" onclick="runVoucherTester()" class="btn-primary h-9 w-full text-xs cursor-pointer">Проверить</button>
 
-                            <div id="tester-result" class="hidden card-sub p-3.5 text-xs font-mono flex-col gap-2">
-                                <div id="row-ocr-time" class="hidden justify-between items-center py-1 px-2.5 rounded-[6px] bg-[#3b82f6]/10 border border-[#3b82f6]/25">
+                            <div id="tester-result" class="anim-panel hidden card-sub p-3.5 text-xs font-mono flex-col gap-2">
+                                <div id="row-ocr-time" class="anim-panel hidden justify-between items-center py-1 px-2.5 rounded-[6px] bg-[#3b82f6]/10 border border-[#3b82f6]/25">
                                     <span class="text-[#60a5fa]">Чтение OCR:</span>
                                     <span id="res-ocr-time" class="text-[#ededed]">—</span>
                                 </div>
                                 <div class="flex justify-between gap-2"><span class="text-[#85858b]">Шаблон:</span> <span id="res-raw" class="text-[#e5a93c]">—</span></div>
                                 <div class="flex justify-between gap-2"><span class="text-[#85858b]">Решенный X:</span> <span id="res-x" class="text-[#60a5fa]">—</span></div>
                                 <div class="flex justify-between gap-2"><span class="text-[#85858b]">Готовый код:</span> <span id="res-final" class="text-[#4cc38a]">—</span></div>
-                                <div id="row-ocr-text" class="hidden flex-col gap-1 pt-2 border-t border-white/[0.08]">
+                                <div id="row-ocr-text" class="anim-panel hidden flex-col gap-1 pt-2 border-t border-white/[0.08]">
                                     <span class="text-[#85858b] text-[11px]">Текст с фото:</span>
                                     <pre id="res-ocr-text" class="text-[11px] text-[#a1a1a6] max-h-16 overflow-y-auto whitespace-pre-wrap"></pre>
                                 </div>
@@ -1177,7 +1447,7 @@
                         </section>
 
                         <!-- Журнал перехватов -->
-                        <section class="lg:col-span-2 card-surface p-5 flex flex-col gap-4" aria-labelledby="vouchers-history-heading">
+                        <section class="lg:col-span-7 xl:col-span-8 card-surface p-5 flex flex-col gap-4" aria-labelledby="vouchers-history-heading">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div>
                                     <h2 id="vouchers-history-heading" class="text-sm font-medium text-[#ededed]">Журнал перехватов</h2>
@@ -1256,7 +1526,7 @@
                 <!-- ========================================================= -->
                 <!-- 4. ВКЛАДКА: ПОЧТА (@696752.xyz)                           -->
                 <!-- ========================================================= -->
-                <div id="tab-tempmail" class="hidden flex flex-col gap-5">
+                <div id="tab-tempmail" class="tab-pane anim-panel tab-stagger hidden flex flex-col gap-5">
                     <div>
                         <h1 class="text-2xl font-medium text-[#ededed] tracking-tight">Временная почта</h1>
                         <p class="text-[13px] text-[#85858b] mt-0.5 font-mono">Домен @696752.xyz · автопроверка каждые 5 с</p>
@@ -1319,7 +1589,7 @@
                 <!-- 5. ВКЛАДКА: ОКНО УДАЛЁННЫХ НОД                             -->
                 <!-- ========================================================= -->
                 {% if linked_nodes %}
-                <div id="tab-node-view" class="hidden flex flex-col gap-4">
+                <div id="tab-node-view" class="tab-pane anim-panel tab-stagger hidden flex flex-col gap-4">
                     <div class="card-surface p-3.5 flex flex-wrap items-center justify-between gap-2">
                         <div class="flex items-center gap-3 w-full sm:w-auto">
                             <label for="node-frame-select" class="text-xs text-[#85858b] hidden sm:inline">Удалённый сервер</label>
@@ -1340,7 +1610,7 @@
                 <!-- ========================================================= -->
                 <!-- 6. ВКЛАДКА: КОРЗИНА                                       -->
                 <!-- ========================================================= -->
-                <div id="tab-trash" class="hidden flex flex-col gap-5">
+                <div id="tab-trash" class="tab-pane anim-panel tab-stagger hidden flex flex-col gap-5">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h1 class="text-2xl font-medium text-[#ededed] tracking-tight">Корзина</h1>
@@ -1401,16 +1671,27 @@
                 <!-- ========================================================= -->
                 <!-- 7. ВКЛАДКА: НАСТРОЙКИ                                     -->
                 <!-- ========================================================= -->
-                <div id="tab-settings" class="hidden max-w-4xl flex flex-col gap-5">
-                    <div>
-                        <h1 class="text-2xl font-medium text-[#ededed] tracking-tight">Настройки</h1>
-                        <p class="text-[13px] text-[#85858b] mt-0.5">Параметры перехвата, вывода средств, уведомлений и кластера VPS</p>
+                <div id="tab-settings" class="tab-pane anim-panel tab-stagger hidden flex flex-col gap-5">
+                    <div class="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                            <h1 class="text-2xl font-medium text-[#ededed] tracking-tight">Настройки</h1>
+                            <p class="text-[13px] text-[#85858b] mt-0.5">Параметры перехвата, вывода средств, уведомлений, интерфейса и кластера VPS</p>
+                        </div>
+                        <div class="card-surface px-3.5 py-2 text-xs font-mono text-[#85858b] flex items-center gap-2">
+                            <span>@{{ settings.source_channel }} → @{{ settings.target_bot }}</span>
+                            <span class="opacity-40">·</span>
+                            <span>Стиль: <span id="settings-active-theme-badge" class="text-[#ededed]">Графит</span></span>
+                        </div>
                     </div>
 
-                    <!-- Основные параметры -->
-                    <section class="card-surface p-5 sm:p-6">
-                        <h2 class="text-sm font-medium text-[#ededed] mb-4">Снайпер, вывод и доступы</h2>
-                        <form action="/settings/save" method="post" class="flex flex-col gap-5">
+                    <!-- Основные параметры (2 сбалансированные колонки на широких экранах) -->
+                    <form action="/settings/save" method="post" class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+                        <section class="xl:col-span-6 card-surface p-5 sm:p-6 flex flex-col gap-4" aria-labelledby="settings-core-heading">
+                            <div class="flex items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
+                                <h2 id="settings-core-heading" class="text-sm font-medium text-[#ededed]">Снайпер, доступы и вывод</h2>
+                                <span class="text-[11px] font-mono text-[#85858b]">Доступ и маршруты</span>
+                            </div>
+
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                 <div>
                                     <label for="set-admin-user" class="text-xs text-[#a1a1a6] block mb-1.5">Логин администратора</label>
@@ -1420,7 +1701,7 @@
                                     <label for="admin_pass_input" class="text-xs text-[#a1a1a6] block mb-1.5">Пароль администратора</label>
                                     <div class="relative">
                                         <input id="admin_pass_input" name="admin_pass" type="password" value="{{ settings.admin_pass }}" required class="field-input w-full h-9 pl-3 pr-9 text-xs mask-privacy">
-                                        <button type="button" onclick="togglePassVisibility()" aria-label="Показать пароль" class="absolute right-2 top-1/2 -translate-y-1/2 text-[#85858b] hover:text-[#ededed] p-1 cursor-pointer">
+                                        <button type="button" onclick="togglePassVisibility()" aria-label="Показать пароль" class="absolute right-2 top-1/2 -translate-y-1/2 text-[#85858b] hover:text-[#ededed] p-1 cursor-pointer transition-colors">
                                             <svg class="w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                         </button>
                                     </div>
@@ -1464,222 +1745,324 @@
                                 </div>
                             </div>
 
-                            <!-- Переключатели режимов -->
-                            <div class="flex flex-col gap-3 pt-2 border-t border-white/[0.08]">
-                                <div class="card-sub p-4 flex items-center justify-between gap-4">
+                            <div class="card-sub p-4 flex items-center justify-between gap-4 mt-auto">
+                                <div>
+                                    <div class="text-[13px] font-medium text-[#ededed]">Авто-вывод при достижении порога (≥ {{ settings.min_withdraw_amount or 30 }} ₽)</div>
+                                    <div class="text-xs text-[#85858b] mt-0.5">Автоматический перенос баланса на указанный ID сразу после активации ваучера</div>
+                                </div>
+                                <input type="checkbox" name="auto_withdraw_enabled" value="1" {% if settings.auto_withdraw_enabled %}checked{% endif %} aria-label="Авто-вывод">
+                            </div>
+                        </section>
+
+                        <section class="xl:col-span-6 card-surface p-5 sm:p-6 flex flex-col gap-3.5" aria-labelledby="settings-modes-heading">
+                            <div class="flex items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
+                                <h2 id="settings-modes-heading" class="text-sm font-medium text-[#ededed]">Smart Jitter, Анти-бан и Уведомления</h2>
+                                <span class="text-[11px] font-mono text-[#85858b]">Поведение ботов</span>
+                            </div>
+
+                            <div class="card-sub p-4 flex flex-col gap-3">
+                                <div class="flex items-center justify-between gap-4">
                                     <div>
-                                        <div class="text-[13px] font-medium text-[#ededed]">Авто-вывод при достижении порога (≥ {{ settings.min_withdraw_amount or 30 }} ₽)</div>
-                                        <div class="text-xs text-[#85858b] mt-0.5">Автоматический перенос баланса на указанный ID сразу после активации ваучера</div>
+                                        <div class="text-[13px] font-medium text-[#ededed]">Smart Jitter (микро-задержка между аккаунтами)</div>
+                                        <div class="text-xs text-[#85858b] mt-0.5">Разносит залп нескольких ботов по времени для снижения риска флуд-лимита</div>
                                     </div>
-                                    <input type="checkbox" name="auto_withdraw_enabled" value="1" {% if settings.auto_withdraw_enabled %}checked{% endif %} aria-label="Авто-вывод">
+                                    <input type="checkbox" name="enable_smart_jitter" value="1" {% if settings.enable_smart_jitter %}checked{% endif %} aria-label="Smart Jitter">
                                 </div>
-
-                                <div class="card-sub p-4 flex flex-col gap-3">
-                                    <div class="flex items-center justify-between gap-4">
-                                        <div>
-                                            <div class="text-[13px] font-medium text-[#ededed]">Smart Jitter (микро-задержка между аккаунтами)</div>
-                                            <div class="text-xs text-[#85858b] mt-0.5">Разносит залп нескольких ботов по времени для снижения риска флуд-лимита</div>
-                                        </div>
-                                        <input type="checkbox" name="enable_smart_jitter" value="1" {% if settings.enable_smart_jitter %}checked{% endif %} aria-label="Smart Jitter">
+                                <div class="grid grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
+                                    <div>
+                                        <label for="set-jitter-min" class="text-xs text-[#85858b] block mb-1">Мин. шаг (мс)</label>
+                                        <input id="set-jitter-min" name="jitter_min_ms" type="number" min="0" max="2000" value="{{ settings.jitter_min_ms or 20 }}" class="field-input w-full h-8 px-3 text-xs font-mono">
                                     </div>
-                                    <div class="grid grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
-                                        <div>
-                                            <label for="set-jitter-min" class="text-xs text-[#85858b] block mb-1">Мин. шаг (мс)</label>
-                                            <input id="set-jitter-min" name="jitter_min_ms" type="number" min="0" max="2000" value="{{ settings.jitter_min_ms or 20 }}" class="field-input w-full h-8 px-3 text-xs font-mono">
-                                        </div>
-                                        <div>
-                                            <label for="set-jitter-max" class="text-xs text-[#85858b] block mb-1">Макс. шаг (мс)</label>
-                                            <input id="set-jitter-max" name="jitter_max_ms" type="number" min="1" max="5000" value="{{ settings.jitter_max_ms or 80 }}" class="field-input w-full h-8 px-3 text-xs font-mono">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="card-sub p-4 flex flex-col gap-3">
-                                    <div class="flex items-center justify-between gap-4">
-                                        <div>
-                                            <div class="text-[13px] font-medium text-[#ededed]">Фоновый прогрев аккаунтов (Anti-Ban)</div>
-                                            <div class="text-xs text-[#85858b] mt-0.5">Индивидуальные окна 2.5–5.5ч для каждого аккаунта без одновременного залпа</div>
-                                        </div>
-                                        <input type="checkbox" name="enable_stealth_warmup" value="1" {% if settings.enable_stealth_warmup %}checked{% endif %} aria-label="Фоновый прогрев">
-                                    </div>
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
-                                        <div>
-                                            <label for="set-warmup-mode" class="text-xs text-[#85858b] block mb-1">Режим имитации человека</label>
-                                            <select id="set-warmup-mode" name="warmup_mode" class="field-input w-full h-8 px-2.5 text-xs">
-                                                <option value="mega" {% if settings.warmup_mode|default('mega') == 'mega' %}selected{% endif %}>Мега-прогрев (99% Human Behavior)</option>
-                                                <option value="normal" {% if settings.warmup_mode|default('mega') == 'normal' %}selected{% endif %}>Обычный стелс-прогрев</option>
-                                            </select>
-                                        </div>
-                                        <div class="flex items-end justify-between gap-3 pb-1">
-                                            <div>
-                                                <div class="text-xs text-[#ededed]">Ночной покой (01:00–07:00)</div>
-                                                <div class="text-[11px] text-[#85858b]">Снижение частоты авто-прогрева ночью</div>
-                                            </div>
-                                            <input type="checkbox" name="warmup_night_quiet" value="1" {% if settings.warmup_night_quiet is not defined or settings.warmup_night_quiet %}checked{% endif %} aria-label="Ночное снижение активности">
-                                        </div>
-                                    </div>
-                                    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-2 border-t border-white/[0.06]">
-                                        <div class="flex-1">
-                                            <label for="set-warmup-ch" class="text-xs text-[#85858b] block mb-1">Публичные каналы (через запятую)</label>
-                                            <input id="set-warmup-ch" name="warmup_channels" value="{{ settings.warmup_channels or 'telegram, durov' }}" class="field-input w-full h-8 px-3 text-xs font-mono">
-                                        </div>
-                                        {% if settings.last_warmup_at %}
-                                        <div class="text-xs font-mono text-[#85858b] shrink-0">Последний прогрев: <span class="text-[#4cc38a]">{{ settings.last_warmup_at }}</span></div>
-                                        {% endif %}
-                                    </div>
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div>
-                                                <div class="text-xs text-[#ededed]">Автоподписка на каналы выше</div>
-                                                <div class="text-[11px] text-[#85858b]">Плавное вступление в указанные каналы</div>
-                                            </div>
-                                            <input type="checkbox" name="auto_join_warmup_channels" value="1" {% if settings.auto_join_warmup_channels is not defined or settings.auto_join_warmup_channels %}checked{% endif %} aria-label="Автоподписка на каналы">
-                                        </div>
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div>
-                                                <div class="text-xs text-[#ededed]">Авто-/start на @{{ settings.target_bot or 'Virtnumber_buy_bot' }}</div>
-                                                <div class="text-[11px] text-[#85858b]">Активирует бота для новых аккаунтов</div>
-                                            </div>
-                                            <input type="checkbox" name="auto_start_target_bot" value="1" {% if settings.auto_start_target_bot is not defined or settings.auto_start_target_bot %}checked{% endif %} aria-label="Автостарт целевого бота">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="card-sub p-4 flex flex-col gap-3">
-                                    <div class="flex items-center justify-between gap-4">
-                                        <div>
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-[13px] font-medium text-[#ededed]">Push-уведомления и звук</span>
-                                                <span id="settings-push-badge" class="text-[11px] font-mono text-[#4cc38a]">Активно</span>
-                                            </div>
-                                            <div class="text-xs text-[#85858b] mt-0.5">Баннеры и звук устройства при ваучерах, авто-выводе и новых письмах</div>
-                                        </div>
-                                        <input type="checkbox" id="setting-push-toggle" name="push_notifications_enabled" value="1" onchange="togglePushFromSettings(this.checked)" {% if settings.push_notifications_enabled is not defined or settings.push_notifications_enabled %}checked{% endif %} aria-label="Push-уведомления">
-                                    </div>
-                                    <div class="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
-                                        <div>
-                                            <div class="text-[13px] font-medium text-[#ededed]">Радар анонсов и обратного отсчета</div>
-                                            <div class="text-xs text-[#85858b] mt-0.5">Предупреждает до публикации ваучера и заранее прогревает соединения</div>
-                                        </div>
-                                        <input type="checkbox" name="radar_teaser_enabled" value="1" {% if settings.radar_teaser_enabled is not defined or settings.radar_teaser_enabled %}checked{% endif %} aria-label="Радар анонсов">
-                                    </div>
-                                    <div class="flex items-center justify-between gap-2 pt-2 border-t border-white/[0.06]">
-                                        <span class="text-xs text-[#85858b] font-mono">Звуковой профиль определяется под ОС автоматически</span>
-                                        <button type="button" onclick="testPushFromSettings()" class="btn-surface h-8 px-3 text-xs cursor-pointer">Тест звука и push</button>
+                                    <div>
+                                        <label for="set-jitter-max" class="text-xs text-[#85858b] block mb-1">Макс. шаг (мс)</label>
+                                        <input id="set-jitter-max" name="jitter_max_ms" type="number" min="1" max="5000" value="{{ settings.jitter_max_ms or 80 }}" class="field-input w-full h-8 px-3 text-xs font-mono">
                                     </div>
                                 </div>
                             </div>
 
-                            <button type="submit" class="btn-primary h-10 px-5 text-xs self-start cursor-pointer">Сохранить настройки</button>
-                        </form>
-                    </section>
+                            <div class="card-sub p-4 flex flex-col gap-3">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div>
+                                        <div class="text-[13px] font-medium text-[#ededed]">Фоновый прогрев аккаунтов (Anti-Ban)</div>
+                                        <div class="text-xs text-[#85858b] mt-0.5">Индивидуальные окна 2.5–5.5ч для каждого аккаунта без одновременного залпа</div>
+                                    </div>
+                                    <input type="checkbox" name="enable_stealth_warmup" value="1" {% if settings.enable_stealth_warmup %}checked{% endif %} aria-label="Фоновый прогрев">
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
+                                    <div>
+                                        <label for="set-warmup-mode" class="text-xs text-[#85858b] block mb-1">Режим имитации человека</label>
+                                        <select id="set-warmup-mode" name="warmup_mode" class="field-input w-full h-8 px-2.5 text-xs">
+                                            <option value="mega" {% if settings.warmup_mode|default('mega') == 'mega' %}selected{% endif %}>Мега-прогрев (99% Human Behavior)</option>
+                                            <option value="normal" {% if settings.warmup_mode|default('mega') == 'normal' %}selected{% endif %}>Обычный стелс-прогрев</option>
+                                        </select>
+                                    </div>
+                                    <div class="flex items-end justify-between gap-3 pb-1">
+                                        <div>
+                                            <div class="text-xs text-[#ededed]">Ночной покой (01:00–07:00)</div>
+                                            <div class="text-[11px] text-[#85858b]">Снижение частоты авто-прогрева ночью</div>
+                                        </div>
+                                        <input type="checkbox" name="warmup_night_quiet" value="1" {% if settings.warmup_night_quiet is not defined or settings.warmup_night_quiet %}checked{% endif %} aria-label="Ночное снижение активности">
+                                    </div>
+                                </div>
+                                <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-2 border-t border-white/[0.06]">
+                                    <div class="flex-1">
+                                        <label for="set-warmup-ch" class="text-xs text-[#85858b] block mb-1">Публичные каналы (через запятую)</label>
+                                        <input id="set-warmup-ch" name="warmup_channels" value="{{ settings.warmup_channels or 'telegram, durov' }}" class="field-input w-full h-8 px-3 text-xs font-mono">
+                                    </div>
+                                    {% if settings.last_warmup_at %}
+                                    <div class="text-xs font-mono text-[#85858b] shrink-0">Последний прогрев: <span class="text-[#4cc38a]">{{ settings.last_warmup_at }}</span></div>
+                                    {% endif %}
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div>
+                                            <div class="text-xs text-[#ededed]">Автоподписка на каналы выше</div>
+                                            <div class="text-[11px] text-[#85858b]">Плавное вступление в указанные каналы</div>
+                                        </div>
+                                        <input type="checkbox" name="auto_join_warmup_channels" value="1" {% if settings.auto_join_warmup_channels is not defined or settings.auto_join_warmup_channels %}checked{% endif %} aria-label="Автоподписка на каналы">
+                                    </div>
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div>
+                                            <div class="text-xs text-[#ededed]">Авто-/start на @{{ settings.target_bot or 'Virtnumber_buy_bot' }}</div>
+                                            <div class="text-[11px] text-[#85858b]">Активирует бота для новых аккаунтов</div>
+                                        </div>
+                                        <input type="checkbox" name="auto_start_target_bot" value="1" {% if settings.auto_start_target_bot is not defined or settings.auto_start_target_bot %}checked{% endif %} aria-label="Автостарт целевого бота">
+                                    </div>
+                                </div>
+                            </div>
 
-                    <!-- Управление кластером VPS -->
-                    <section class="card-surface p-5 sm:p-6 flex flex-col gap-4">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                                <h2 class="text-sm font-medium text-[#ededed]">Связанные серверы (VPS-кластер)</h2>
-                                <p class="text-xs text-[#85858b] mt-0.5">Единая касса, контроль доступности и массовый вывод</p>
+                            <div class="card-sub p-4 flex flex-col gap-3">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[13px] font-medium text-[#ededed]">Push-уведомления и звук</span>
+                                            <span id="settings-push-badge" class="text-[11px] font-mono text-[#4cc38a]">Активно</span>
+                                        </div>
+                                        <div class="text-xs text-[#85858b] mt-0.5">Баннеры и звук устройства при ваучерах, авто-выводе и новых письмах</div>
+                                    </div>
+                                    <input type="checkbox" id="setting-push-toggle" name="push_notifications_enabled" value="1" onchange="togglePushFromSettings(this.checked)" {% if settings.push_notifications_enabled is not defined or settings.push_notifications_enabled %}checked{% endif %} aria-label="Push-уведомления">
+                                </div>
+                                <div class="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+                                    <div>
+                                        <div class="text-[13px] font-medium text-[#ededed]">Радар анонсов и обратного отсчета</div>
+                                        <div class="text-xs text-[#85858b] mt-0.5">Предупреждает до публикации ваучера и заранее прогревает соединения</div>
+                                    </div>
+                                    <input type="checkbox" name="radar_teaser_enabled" value="1" {% if settings.radar_teaser_enabled is not defined or settings.radar_teaser_enabled %}checked{% endif %} aria-label="Радар анонсов">
+                                </div>
+                                <div class="flex items-center justify-between gap-2 pt-2 border-t border-white/[0.06]">
+                                    <span class="text-xs text-[#85858b] font-mono">Звуковой профиль определяется под ОС автоматически</span>
+                                    <button type="button" onclick="testPushFromSettings()" class="btn-surface h-8 px-3 text-xs cursor-pointer">Тест звука и push</button>
+                                </div>
                             </div>
-                            <div class="flex items-center gap-2">
-                                {% if linked_nodes %}
-                                <button type="button" onclick="refreshNodesWatchdog(true)" class="btn-surface h-8 px-3 text-xs cursor-pointer">Проверить ноды</button>
-                                {% endif %}
-                                <span class="text-xs font-mono text-[#85858b]">Узлов: {{ linked_nodes|length }}</span>
-                            </div>
+                        </section>
+
+                        <div class="xl:col-span-12 card-surface px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-xs text-[#85858b] font-mono">Изменения перехвата и анти-бана вступают в силу без перезапуска активных сессий</span>
+                            <button type="submit" class="btn-primary h-9 px-5 text-xs cursor-pointer">Сохранить настройки</button>
                         </div>
+                    </form>
 
-                        {% if linked_nodes %}
-                        <div tabindex="0" role="region" aria-label="Список подключённых нод" class="overflow-x-auto border border-white/[0.08] rounded-[8px]">
-                            <table class="w-full text-left text-xs min-w-[500px]">
-                                <thead class="bg-[#141415] text-[#85858b] border-b border-white/[0.08]">
-                                    <tr>
-                                        <th scope="col" class="p-3 font-medium">Название</th>
-                                        <th scope="col" class="p-3 font-medium">Адрес</th>
-                                        <th scope="col" class="p-3 font-medium">Статус</th>
-                                        <th scope="col" class="p-3 font-medium">Логин</th>
-                                        <th scope="col" class="p-3 font-medium text-right">Действие</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-white/[0.06]">
-                                    {% for node in linked_nodes %}
-                                    {% set nst = nodes_stats[loop.index0] if nodes_stats and loop.index0 < nodes_stats|length else none %}
-                                    <tr class="hover:bg-white/[0.02] transition-colors">
-                                        <td class="p-3 font-medium text-[#ededed]">{{ node.name }}</td>
-                                        <td class="p-3 font-mono text-[#60a5fa] mask-privacy"><a href="{{ node.url }}" target="_blank" rel="noopener noreferrer" class="hover:underline">{{ node.url }}</a></td>
-                                        <td class="p-3">
-                                            <span id="settings-watchdog-badge-{{ loop.index0 }}" class="font-mono {% if nst and nst.online %}text-[#4cc38a]{% else %}text-[#e5484d]{% endif %}">{{ nst.status_text if nst else 'Offline' }}</span>
-                                        </td>
-                                        <td class="p-3 text-[#85858b] font-mono mask-privacy">{{ node.user }}</td>
-                                        <td class="p-3 text-right">
-                                            <form action="/node/delete" method="post" onsubmit="return confirm('Отвязать этот сервер?')" class="m-0">
-                                                <input type="hidden" name="node_index" value="{{ loop.index0 }}">
-                                                <button type="submit" class="btn-danger-soft h-7 px-2.5 text-xs cursor-pointer">Удалить</button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        {% endif %}
+                    <!-- Нижний ряд: Кластер VPS + Оформление и секретный стиль -->
+                    <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+                        <!-- Управление кластером VPS -->
+                        <section class="xl:col-span-7 card-surface p-5 sm:p-6 flex flex-col gap-4">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h2 class="text-sm font-medium text-[#ededed]">Связанные серверы (VPS-кластер)</h2>
+                                    <p class="text-xs text-[#85858b] mt-0.5">Единая касса, контроль доступности и массовый вывод</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    {% if linked_nodes %}
+                                    <button type="button" onclick="refreshNodesWatchdog(true)" class="btn-surface h-8 px-3 text-xs cursor-pointer">Проверить ноды</button>
+                                    {% endif %}
+                                    <span class="text-xs font-mono text-[#85858b]">Узлов: {{ linked_nodes|length }}</span>
+                                </div>
+                            </div>
 
-                        <form action="/node/add" method="post" class="card-sub p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
-                            <div>
-                                <label for="add-node-name" class="text-xs text-[#85858b] block mb-1">Название</label>
-                                <input id="add-node-name" name="node_name" placeholder="VPS #2" required class="field-input w-full h-8 px-2.5 text-xs">
+                            {% if linked_nodes %}
+                            <div tabindex="0" role="region" aria-label="Список подключённых нод" class="overflow-x-auto border border-white/[0.08] rounded-[8px]">
+                                <table class="w-full text-left text-xs min-w-[500px]">
+                                    <thead class="bg-[#141415] text-[#85858b] border-b border-white/[0.08]">
+                                        <tr>
+                                            <th scope="col" class="p-3 font-medium">Название</th>
+                                            <th scope="col" class="p-3 font-medium">Адрес</th>
+                                            <th scope="col" class="p-3 font-medium">Статус</th>
+                                            <th scope="col" class="p-3 font-medium">Логин</th>
+                                            <th scope="col" class="p-3 font-medium text-right">Действие</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-white/[0.06]">
+                                        {% for node in linked_nodes %}
+                                        {% set nst = nodes_stats[loop.index0] if nodes_stats and loop.index0 < nodes_stats|length else none %}
+                                        <tr class="hover:bg-white/[0.02] transition-colors">
+                                            <td class="p-3 font-medium text-[#ededed]">{{ node.name }}</td>
+                                            <td class="p-3 font-mono text-[#60a5fa] mask-privacy"><a href="{{ node.url }}" target="_blank" rel="noopener noreferrer" class="hover:underline">{{ node.url }}</a></td>
+                                            <td class="p-3">
+                                                <span id="settings-watchdog-badge-{{ loop.index0 }}" class="font-mono {% if nst and nst.online %}text-[#4cc38a]{% else %}text-[#e5484d]{% endif %}">{{ nst.status_text if nst else 'Offline' }}</span>
+                                            </td>
+                                            <td class="p-3 text-[#85858b] font-mono mask-privacy">{{ node.user }}</td>
+                                            <td class="p-3 text-right">
+                                                <form action="/node/delete" method="post" onsubmit="return confirm('Отвязать этот сервер?')" class="m-0">
+                                                    <input type="hidden" name="node_index" value="{{ loop.index0 }}">
+                                                    <button type="submit" class="btn-danger-soft h-7 px-2.5 text-xs cursor-pointer">Удалить</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
                             </div>
-                            <div>
-                                <label for="add-node-url" class="text-xs text-[#85858b] block mb-1">IP или URL</label>
-                                <input id="add-node-url" name="node_url" placeholder="http://1.2.3.4:8080" required class="field-input w-full h-8 px-2.5 text-xs font-mono">
+                            {% endif %}
+
+                            <form action="/node/add" method="post" class="card-sub p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                                <div>
+                                    <label for="add-node-name" class="text-xs text-[#85858b] block mb-1">Название</label>
+                                    <input id="add-node-name" name="node_name" placeholder="VPS #2" required class="field-input w-full h-8 px-2.5 text-xs">
+                                </div>
+                                <div>
+                                    <label for="add-node-url" class="text-xs text-[#85858b] block mb-1">IP или URL</label>
+                                    <input id="add-node-url" name="node_url" placeholder="http://1.2.3.4:8080" required class="field-input w-full h-8 px-2.5 text-xs font-mono">
+                                </div>
+                                <div>
+                                    <label for="add-node-user" class="text-xs text-[#85858b] block mb-1">Логин</label>
+                                    <input id="add-node-user" name="node_user" value="admin" required class="field-input w-full h-8 px-2.5 text-xs">
+                                </div>
+                                <div>
+                                    <label for="add-node-pass" class="text-xs text-[#85858b] block mb-1">Пароль</label>
+                                    <input id="add-node-pass" name="node_pass" placeholder="Пароль" required class="field-input w-full h-8 px-2.5 text-xs">
+                                </div>
+                                <button type="submit" class="btn-surface h-8 px-3 text-xs cursor-pointer">Добавить ноду</button>
+                            </form>
+                        </section>
+
+                        <!-- Оформление, анимации и секретный стиль сайта -->
+                        <section class="xl:col-span-5 card-surface p-5 sm:p-6 flex flex-col gap-4" aria-labelledby="settings-theme-heading">
+                            <div class="flex items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
+                                <div>
+                                    <h2 id="settings-theme-heading" class="text-sm font-medium text-[#ededed]">Оформление и интерфейс</h2>
+                                    <p class="text-xs text-[#85858b] mt-0.5">Стиль пульта сохраняется в браузере без перезагрузки</p>
+                                </div>
+                                <span class="text-[11px] font-mono text-[#85858b]">UI v5.0</span>
                             </div>
-                            <div>
-                                <label for="add-node-user" class="text-xs text-[#85858b] block mb-1">Логин</label>
-                                <input id="add-node-user" name="node_user" value="admin" required class="field-input w-full h-8 px-2.5 text-xs">
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <button type="button" id="theme-btn-default" onclick="applyUiTheme('default')" class="card-sub p-3.5 text-left flex flex-col gap-2.5 cursor-pointer transition-colors">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="w-3 h-3 rounded-[4px] border border-white/15 bg-[#141415]"></span>
+                                            <span class="w-3 h-3 rounded-[4px] border border-white/15 bg-[#232325]"></span>
+                                            <span class="w-3 h-3 rounded-[4px] bg-[#3b82f6]"></span>
+                                        </div>
+                                        <span id="theme-tag-default" class="text-[11px] font-mono text-[#4cc38a]">Активна</span>
+                                    </div>
+                                    <div>
+                                        <div class="text-[13px] font-medium text-[#ededed]">Графит</div>
+                                        <div class="text-[11px] text-[#85858b] mt-0.5">Стандартная строгая тема</div>
+                                    </div>
+                                </button>
+
+                                <!-- Секретный слот темы: открывается 3 нажатиями -->
+                                <div id="secret-theme-slot" class="relative">
+                                    <button type="button" id="secret-theme-locked" onclick="handleSecretThemeClick()" class="card-sub w-full h-full p-3.5 text-left flex flex-col justify-between gap-2.5 cursor-pointer transition-colors hover:border-white/20">
+                                        <div class="flex items-center justify-between gap-2 w-full">
+                                            <svg class="w-4 h-4 text-[#85858b]" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+                                            </svg>
+                                            <span id="secret-unlock-counter" class="text-[11px] font-mono text-[#85858b]">0 / 3</span>
+                                        </div>
+                                        <div>
+                                            <div class="text-[13px] font-medium text-[#ededed]">Секретный стиль</div>
+                                            <div class="text-[11px] text-[#85858b] mt-0.5">Нажмите 3 раза, чтобы открыть</div>
+                                        </div>
+                                    </button>
+
+                                    <div id="secret-theme-unlocked" class="anim-panel hidden h-full">
+                                        <button type="button" id="theme-btn-carbon" onclick="applyUiTheme('carbon-signal')" class="card-sub w-full h-full p-3.5 text-left flex flex-col gap-2.5 cursor-pointer transition-colors">
+                                            <div class="flex items-center justify-between gap-2 w-full">
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="w-3 h-3 rounded-[4px] border border-white/20 bg-[#0d0e11]"></span>
+                                                    <span class="w-3 h-3 rounded-[4px] border border-white/20 bg-[#1a1d24]"></span>
+                                                    <span class="w-3 h-3 rounded-[4px] bg-[#ea7e1e]"></span>
+                                                </div>
+                                                <span id="theme-tag-carbon" class="text-[11px] font-mono text-[#85858b]">Открыта</span>
+                                            </div>
+                                            <div class="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <div class="text-[13px] font-medium text-[#ededed]">Carbon Signal</div>
+                                                    <div class="text-[11px] text-[#85858b] mt-0.5">Вольфрам · Сигнальный янтарь</div>
+                                                </div>
+                                                <span role="button" tabindex="0" onclick="event.stopPropagation(); lockSecretTheme()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();lockSecretTheme();}" title="Скрыть секретный стиль" aria-label="Скрыть секретный стиль" class="text-[11px] text-[#85858b] hover:text-[#ededed] p-1 rounded-[4px] cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+                                                </span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <label for="add-node-pass" class="text-xs text-[#85858b] block mb-1">Пароль</label>
-                                <input id="add-node-pass" name="node_pass" placeholder="Пароль" required class="field-input w-full h-8 px-2.5 text-xs">
+
+                            <div class="card-sub p-3.5 flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-medium text-[#ededed]">Скорость анимаций</div>
+                                    <div class="text-[11px] text-[#85858b]">Плавное открытие вкладок, панелей и списков</div>
+                                </div>
+                                <div class="inline-flex bg-[#141415] border border-white/[0.08] rounded-[7px] p-0.5 gap-0.5">
+                                    <button type="button" id="motion-btn-smooth" onclick="setMotionMode('smooth')" class="h-7 px-2.5 rounded-[5px] text-[11px] font-mono bg-[#232325] text-[#ededed] cursor-pointer transition-colors">Плавные</button>
+                                    <button type="button" id="motion-btn-turbo" onclick="setMotionMode('turbo')" class="h-7 px-2.5 rounded-[5px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors">Турбо</button>
+                                </div>
                             </div>
-                            <button type="submit" class="btn-surface h-8 px-3 text-xs cursor-pointer">Добавить ноду</button>
-                        </form>
-                    </section>
+
+                            <div class="grid grid-cols-2 gap-2.5 pt-1">
+                                <button type="button" onclick="toggleConsolePanel()" class="btn-surface h-9 px-3 text-xs flex items-center justify-between gap-2 cursor-pointer">
+                                    <span>Консоль логов</span>
+                                    <span id="settings-console-status" class="font-mono text-[11px] text-[#60a5fa]">Открыта</span>
+                                </button>
+                                <button type="button" onclick="togglePrivacyMode()" class="btn-surface h-9 px-3 text-xs flex items-center justify-between gap-2 cursor-pointer">
+                                    <span>Маска данных</span>
+                                    <span id="settings-privacy-status" class="font-mono text-[11px] text-[#85858b]">Выкл</span>
+                                </button>
+                            </div>
+                        </section>
+                    </div>
                 </div>
 
                 <!-- ========================================================= -->
                 <!-- ЖИВАЯ КОНСОЛЬ ЛОГОВ (доступна внизу рабочей области)      -->
                 <!-- ========================================================= -->
-                <section id="console-panel" class="card-surface overflow-hidden mt-auto" aria-label="Журнал служб">
-                    <div class="px-4 py-2.5 border-b border-white/[0.08] bg-[#141415]/60 flex flex-wrap items-center justify-between gap-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-xs font-medium text-[#ededed] mr-1">Консоль</span>
-                            <div class="inline-flex card-sub p-0.5 gap-0.5 flex-wrap">
-                                <button type="button" onclick="switchLogUnit('farmbot')" id="log-unit-farmbot" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono bg-[#232325] text-[#ededed] cursor-pointer">farmbot</button>
-                                <button type="button" onclick="switchLogUnit('farmweb')" id="log-unit-farmweb" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">farmweb</button>
-                                <button type="button" onclick="switchLogUnit('xray-farm')" id="log-unit-xray-farm" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">xray-farm</button>
-                                <button type="button" onclick="switchLogUnit('xray-watchdog')" id="log-unit-xray-watchdog" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">xray-watchdog</button>
-                                <button type="button" onclick="switchLogUnit('net-proxy')" id="log-unit-net-proxy" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer">net-proxy</button>
+                <div id="console-panel-wrap" class="collapsible-wrapper mt-auto">
+                    <div class="collapsible-inner">
+                        <section id="console-panel" class="card-surface overflow-hidden" aria-label="Журнал служб">
+                            <div class="px-4 py-2.5 border-b border-white/[0.08] bg-[#141415]/60 flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="text-xs font-medium text-[#ededed] mr-1">Консоль</span>
+                                    <div class="inline-flex card-sub p-0.5 gap-0.5 flex-wrap">
+                                        <button type="button" onclick="switchLogUnit('farmbot')" id="log-unit-farmbot" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono bg-[#232325] text-[#ededed] cursor-pointer transition-colors">farmbot</button>
+                                        <button type="button" onclick="switchLogUnit('farmweb')" id="log-unit-farmweb" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors">farmweb</button>
+                                        <button type="button" onclick="switchLogUnit('xray-farm')" id="log-unit-xray-farm" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors">xray-farm</button>
+                                        <button type="button" onclick="switchLogUnit('xray-watchdog')" id="log-unit-xray-watchdog" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors">xray-watchdog</button>
+                                        <button type="button" onclick="switchLogUnit('net-proxy')" id="log-unit-net-proxy" class="h-7 px-2.5 rounded-[6px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors">net-proxy</button>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" onclick="toggleLogPause()" id="log-pause-btn" class="btn-surface h-7 px-2.5 text-xs cursor-pointer">
+                                        <span id="log-pause-label">Пауза</span>
+                                    </button>
+                                    <button type="button" onclick="copyLogs()" class="btn-surface h-7 px-2.5 text-xs cursor-pointer">Копировать</button>
+                                    <button type="button" onclick="fetchLogs(true)" class="btn-surface h-7 px-2.5 text-xs cursor-pointer">Обновить</button>
+                                    <button type="button" onclick="toggleConsolePanel(false)" class="btn-surface h-7 w-7 flex items-center justify-center text-[#85858b] cursor-pointer" aria-label="Свернуть консоль">
+                                        <svg class="w-3.5 h-3.5" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="flex items-center gap-1.5">
-                            <button type="button" onclick="toggleLogPause()" id="log-pause-btn" class="btn-surface h-7 px-2.5 text-xs cursor-pointer">
-                                <span id="log-pause-label">Пауза</span>
-                            </button>
-                            <button type="button" onclick="copyLogs()" class="btn-surface h-7 px-2.5 text-xs cursor-pointer">Копировать</button>
-                            <button type="button" onclick="fetchLogs(true)" class="btn-surface h-7 px-2.5 text-xs cursor-pointer">Обновить</button>
-                            <button type="button" onclick="toggleConsolePanel(false)" class="btn-surface h-7 w-7 flex items-center justify-center text-[#85858b] cursor-pointer" aria-label="Свернуть консоль">
-                                <svg class="w-3.5 h-3.5" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
-                            </button>
-                        </div>
+                            <div id="console-body">
+                                <div id="logs" class="bg-[#0f0f10] p-3.5 text-xs text-[#a1a1a6] h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text font-mono" style="resize: vertical; min-height: 140px; max-height: 600px; scrollbar-gutter: stable; overscroll-behavior: contain;">
+                                    Загрузка системного журнала...
+                                </div>
+                            </div>
+                        </section>
                     </div>
-
-                    <div id="console-body">
-                        <div id="logs" class="bg-[#0f0f10] p-3.5 text-xs text-[#a1a1a6] h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text font-mono" style="resize: vertical; min-height: 140px; max-height: 600px; scrollbar-gutter: stable; overscroll-behavior: contain;">
-                            Загрузка системного журнала...
-                        </div>
-                    </div>
-                </section>
+                </div>
 
                 <footer class="pt-2 pb-2 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-2 text-xs text-[#85858b] font-mono">
                     <span>FarmBot Sniper v5.0 by wcatox</span>
@@ -1747,6 +2130,53 @@
         let currentAccountFilter = 'all';
         let toastTimeout = null;
 
+        let _supportsDisplayTransition;
+        function canTransitionDisplay() {
+            if (_supportsDisplayTransition !== undefined) return _supportsDisplayTransition;
+            if (!window.CSS?.supports?.('transition-behavior', 'allow-discrete') || !document.body) {
+                return false;
+            }
+            const probe = document.createElement('div');
+            probe.style.cssText = 'transition: display 1s allow-discrete !important; display: block;';
+            document.body.appendChild(probe);
+            getComputedStyle(probe).display;
+            probe.style.display = 'none';
+            _supportsDisplayTransition = getComputedStyle(probe).display === 'block';
+            probe.remove();
+            return _supportsDisplayTransition;
+        }
+
+        function supportsTopLayerExit() {
+            return window.CSS?.supports?.('overlay', 'auto') && canTransitionDisplay();
+        }
+
+        function showAnimated(el, displayClass = 'flex') {
+            if (!el) return;
+            el.dataset.animToken = String((Number(el.dataset.animToken || 0) + 1));
+            el.removeAttribute('data-closing');
+            if (displayClass) el.classList.add(displayClass);
+            el.classList.remove('hidden');
+        }
+
+        async function hideAnimated(el, displayClassToRemove = null) {
+            if (!el || el.classList.contains('hidden') || el.hasAttribute('data-closing')) return;
+            const tok = String((Number(el.dataset.animToken || 0) + 1));
+            el.dataset.animToken = tok;
+            el.setAttribute('data-closing', '');
+            const anims = typeof el.getAnimations === 'function' ? el.getAnimations() : [];
+            if (anims.length > 0) {
+                await Promise.race([
+                    Promise.allSettled(anims.map(a => a.finished)),
+                    new Promise(r => setTimeout(r, 340)),
+                ]);
+            }
+            if (el.dataset.animToken === tok && el.hasAttribute('data-closing')) {
+                el.removeAttribute('data-closing');
+                el.classList.add('hidden');
+                if (displayClassToRemove) el.classList.remove(displayClassToRemove);
+            }
+        }
+
         function _makeEl(tag, className, text) {
             const el = document.createElement(tag);
             if (className) el.className = className;
@@ -1769,6 +2199,8 @@
             if (!wrap) return;
             const shouldCollapse = forceState !== null ? forceState : !wrap.classList.contains('is-collapsed');
             wrap.classList.toggle('is-collapsed', shouldCollapse);
+            wrap.toggleAttribute('inert', shouldCollapse);
+            wrap.setAttribute('aria-hidden', shouldCollapse ? 'true' : 'false');
             const btn = document.getElementById(`btn-collapse-${cardKey}`);
             if (btn) btn.classList.toggle('rotated', shouldCollapse);
             localStorage.setItem(`farm_collapse_${cardKey}`, shouldCollapse ? '1' : '0');
@@ -1784,30 +2216,52 @@
         })();
 
         function toggleAddAccountPanel(forceOpen = null) {
-            const panel = document.getElementById('add-account-panel');
-            if (!panel) return;
-            const shouldOpen = forceOpen !== null ? forceOpen : panel.classList.contains('hidden');
-            panel.classList.toggle('hidden', !shouldOpen);
+            const wrap = document.getElementById('add-account-wrap');
+            if (!wrap) return;
+            const shouldOpen = forceOpen !== null ? forceOpen : wrap.classList.contains('is-collapsed');
+            wrap.classList.toggle('is-collapsed', !shouldOpen);
+            wrap.toggleAttribute('inert', !shouldOpen);
+            wrap.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
             if (shouldOpen) {
-                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
 
+        function toggleCustomApiFields(open) {
+            const wrap = document.getElementById('custom-api-fields');
+            if (!wrap) return;
+            const shouldOpen = !!open;
+            wrap.classList.toggle('is-collapsed', !shouldOpen);
+            wrap.toggleAttribute('inert', !shouldOpen);
+            wrap.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+        }
+
         function toggleConsolePanel(forceOpen = null) {
-            const panel = document.getElementById('console-panel');
-            if (!panel) return;
-            const shouldOpen = forceOpen !== null ? forceOpen : panel.classList.contains('hidden');
-            panel.classList.toggle('hidden', !shouldOpen);
+            const wrap = document.getElementById('console-panel-wrap');
+            if (!wrap) return;
+            const shouldOpen = forceOpen !== null ? forceOpen : wrap.classList.contains('is-collapsed');
+            wrap.classList.toggle('is-collapsed', !shouldOpen);
+            wrap.toggleAttribute('inert', !shouldOpen);
+            wrap.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
             localStorage.setItem('farm_console_open', shouldOpen ? '1' : '0');
+            const st = document.getElementById('settings-console-status');
+            if (st) st.textContent = shouldOpen ? 'Открыта' : 'Скрыта';
             if (shouldOpen) {
                 fetchLogs(true);
-                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
-        if (localStorage.getItem('farm_console_open') === '0') {
-            const cp = document.getElementById('console-panel');
-            if (cp) cp.classList.add('hidden');
-        }
+        (function initConsoleState() {
+            const isClosed = localStorage.getItem('farm_console_open') === '0';
+            const wrap = document.getElementById('console-panel-wrap');
+            const st = document.getElementById('settings-console-status');
+            if (wrap && isClosed) {
+                wrap.classList.add('is-collapsed');
+                wrap.setAttribute('inert', '');
+                wrap.setAttribute('aria-hidden', 'true');
+            }
+            if (st) st.textContent = isClosed ? 'Скрыта' : 'Открыта';
+        })();
 
         // =====================================================================
         // УВЕДОМЛЕНИЯ, ПУШИ И ЗВУК УСТРОЙСТВА
@@ -2563,25 +3017,34 @@
             const d = document.getElementById('loading-desc');
             if (t) t.textContent = title || 'Выполняется запрос';
             if (d) d.textContent = desc || 'Подождите несколько секунд';
-            ov.classList.remove('hidden');
-            ov.classList.add('flex');
+            showAnimated(ov, 'flex');
         }
 
-        function switchAddMode(mode) {
+        function hideLoading() {
+            const ov = document.getElementById('loading-overlay');
+            if (ov) hideAnimated(ov, 'flex');
+        }
+
+        async function switchAddMode(mode) {
             const fPhone = document.getElementById('add-form-phone');
             const fFile = document.getElementById('add-form-file');
             const bPhone = document.getElementById('add-mode-phone-btn');
             const bFile = document.getElementById('add-mode-file-btn');
             if (!fPhone || !fFile || !bPhone || !bFile) return;
             const isPhone = mode === 'phone';
-            fPhone.classList.toggle('hidden', !isPhone);
-            fFile.classList.toggle('hidden', isPhone);
             bPhone.className = isPhone
-                ? 'h-7 px-3 rounded-[6px] text-xs font-medium bg-[#232325] text-[#ededed] cursor-pointer'
-                : 'h-7 px-3 rounded-[6px] text-xs font-medium text-[#85858b] hover:text-[#ededed] cursor-pointer';
+                ? 'h-7 px-3 rounded-[6px] text-xs font-medium bg-[#232325] text-[#ededed] cursor-pointer transition-colors'
+                : 'h-7 px-3 rounded-[6px] text-xs font-medium text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors';
             bFile.className = !isPhone
-                ? 'h-7 px-3 rounded-[6px] text-xs font-medium bg-[#232325] text-[#ededed] cursor-pointer'
-                : 'h-7 px-3 rounded-[6px] text-xs font-medium text-[#85858b] hover:text-[#ededed] cursor-pointer';
+                ? 'h-7 px-3 rounded-[6px] text-xs font-medium bg-[#232325] text-[#ededed] cursor-pointer transition-colors'
+                : 'h-7 px-3 rounded-[6px] text-xs font-medium text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors';
+            if (isPhone) {
+                await hideAnimated(fFile);
+                showAnimated(fPhone, 'grid');
+            } else {
+                await hideAnimated(fPhone);
+                showAnimated(fFile, 'grid');
+            }
         }
 
         function toggleVpsMenu(e) {
@@ -2589,18 +3052,21 @@
             const menu = document.getElementById('vps-dropdown-menu');
             const arrow = document.getElementById('vps-menu-arrow');
             if (!menu) return;
-            const isHidden = menu.classList.contains('hidden');
-            menu.classList.toggle('hidden', !isHidden);
-            menu.classList.toggle('flex', isHidden);
-            if (arrow) arrow.classList.toggle('rotate-180', isHidden);
+            const isOpen = !menu.classList.contains('hidden') && !menu.hasAttribute('data-closing');
+            if (isOpen) {
+                hideAnimated(menu, 'flex');
+                if (arrow) arrow.classList.remove('rotate-180');
+            } else {
+                showAnimated(menu, 'flex');
+                if (arrow) arrow.classList.add('rotate-180');
+            }
         }
 
         document.addEventListener('click', () => {
             const menu = document.getElementById('vps-dropdown-menu');
             const arrow = document.getElementById('vps-menu-arrow');
-            if (menu && !menu.classList.contains('hidden')) {
-                menu.classList.add('hidden');
-                menu.classList.remove('flex');
+            if (menu && !menu.classList.contains('hidden') && !menu.hasAttribute('data-closing')) {
+                hideAnimated(menu, 'flex');
                 if (arrow) arrow.classList.remove('rotate-180');
             }
         });
@@ -2622,30 +3088,61 @@
             document.getElementById('privacy-svg-closed')?.classList.toggle('hidden', !isPrivacy);
             const text = document.getElementById('privacy-text');
             if (text) text.textContent = isPrivacy ? 'Скрыто' : 'Маска';
+            const st = document.getElementById('settings-privacy-status');
+            if (st) {
+                st.textContent = isPrivacy ? 'Вкл' : 'Выкл';
+                st.className = isPrivacy ? 'font-mono text-[11px] text-[#4cc38a]' : 'font-mono text-[11px] text-[#85858b]';
+            }
         }
 
         if (localStorage.getItem('farm_privacy_mode') === '1') {
             document.body.classList.add('privacy-mode');
             updatePrivacyButton(true);
+        } else {
+            updatePrivacyButton(false);
         }
 
-        function switchTab(tab) {
-            ['main', 'network', 'vouchers', 'tempmail', 'node-view', 'trash', 'settings'].forEach(t => {
-                const el = document.getElementById('tab-' + t);
-                const btn = document.getElementById('tab-btn-' + t);
-                const mob = document.getElementById('mob-tab-btn-' + t);
+        let _activeTabName = 'main';
+        let _tabSwitchGen = 0;
+
+        async function switchTab(tab, immediate = false) {
+            const tabs = ['main', 'network', 'vouchers', 'tempmail', 'node-view', 'trash', 'settings'];
+            if (!tabs.includes(tab)) tab = 'main';
+            const gen = ++_tabSwitchGen;
+
+            tabs.forEach(t => {
                 const active = t === tab;
-                if (el) {
-                    el.classList.toggle('hidden', !active);
-                    if (active) {
-                        el.classList.remove('tab-entering');
-                        void el.offsetWidth;
-                        el.classList.add('tab-entering');
-                    }
-                }
-                if (btn) btn.classList.toggle('active', active);
-                if (mob) mob.classList.toggle('active', active);
+                document.getElementById('tab-btn-' + t)?.classList.toggle('active', active);
+                document.getElementById('mob-tab-btn-' + t)?.classList.toggle('active', active);
             });
+
+            if (!immediate && window.history && typeof window.history.replaceState === 'function') {
+                try {
+                    const url = new URL(window.location.href);
+                    if (tab === 'main') url.searchParams.delete('tab');
+                    else url.searchParams.set('tab', tab);
+                    window.history.replaceState(null, '', url.toString());
+                } catch (e) {}
+            }
+
+            const prevEl = document.getElementById('tab-' + _activeTabName);
+            const nextEl = document.getElementById('tab-' + tab);
+            if (!nextEl) return;
+
+            if (!immediate && prevEl && prevEl !== nextEl && !prevEl.classList.contains('hidden')) {
+                await hideAnimated(prevEl);
+                if (gen !== _tabSwitchGen) return;
+            } else {
+                tabs.forEach(t => {
+                    if (t !== tab) document.getElementById('tab-' + t)?.classList.add('hidden');
+                });
+            }
+
+            _activeTabName = tab;
+            showAnimated(nextEl, 'flex');
+            nextEl.classList.remove('tab-entering');
+            void nextEl.offsetWidth;
+            nextEl.classList.add('tab-entering');
             if (tab === 'tempmail') initTempMailTab();
         }
 
@@ -2736,9 +3233,9 @@
 
         async function fetchLogs(forceScroll = false) {
             if (logsPaused && !forceScroll) return;
-            const panel = document.getElementById('console-panel');
+            const wrap = document.getElementById('console-panel-wrap');
             const el = document.getElementById('logs');
-            if (!el || (panel && panel.classList.contains('hidden') && !forceScroll)) return;
+            if (!el || (wrap && wrap.classList.contains('is-collapsed') && !forceScroll)) return;
             try {
                 const res = await fetch(`/api/logs?unit=${encodeURIComponent(currentLogUnit)}`);
                 const data = await res.json();
@@ -2771,7 +3268,7 @@
                 const wrap = document.getElementById('tester-preview-wrap');
                 const img = document.getElementById('tester-img-preview');
                 if (img) img.src = testerActiveImageBase64;
-                if (wrap) wrap.classList.remove('hidden');
+                if (wrap) showAnimated(wrap, 'inline-block');
                 runVoucherTester();
             };
             reader.readAsDataURL(file);
@@ -2781,9 +3278,9 @@
             testerActiveImageBase64 = null;
             const input = document.getElementById('tester-file-input');
             if (input) input.value = '';
-            document.getElementById('tester-preview-wrap')?.classList.add('hidden');
-            document.getElementById('row-ocr-time')?.classList.add('hidden');
-            document.getElementById('row-ocr-text')?.classList.add('hidden');
+            hideAnimated(document.getElementById('tester-preview-wrap'), 'inline-block');
+            hideAnimated(document.getElementById('row-ocr-time'), 'flex');
+            hideAnimated(document.getElementById('row-ocr-text'), 'flex');
         }
 
         window.addEventListener('paste', (e) => {
@@ -2830,24 +3327,21 @@
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                box.classList.remove('hidden');
-                box.classList.add('flex');
+                showAnimated(box, 'flex');
                 document.getElementById('res-raw').textContent = data.raw_code || 'Не найден';
                 document.getElementById('res-x').textContent = data.solved_x !== null ? data.solved_x : 'Нет уравнения';
                 document.getElementById('res-final').textContent = data.final_code || '—';
 
                 if (data.is_photo && data.ocr_time_ms !== null) {
-                    rowOcrTime?.classList.remove('hidden');
-                    rowOcrTime?.classList.add('flex');
+                    showAnimated(rowOcrTime, 'flex');
                     if (resOcrTime) resOcrTime.textContent = `${data.ocr_time_ms} ms`;
                     if (rowOcrText && data.ocr_text) {
-                        rowOcrText.classList.remove('hidden');
-                        rowOcrText.classList.add('flex');
+                        showAnimated(rowOcrText, 'flex');
                         if (resOcrText) resOcrText.textContent = data.ocr_text;
                     }
                 } else {
-                    rowOcrTime?.classList.add('hidden');
-                    rowOcrText?.classList.add('hidden');
+                    hideAnimated(rowOcrTime, 'flex');
+                    hideAnimated(rowOcrText, 'flex');
                 }
 
                 const statusMap = {
@@ -2910,7 +3404,7 @@
                 if (d.error) {
                     if (badge) { badge.textContent = 'Ошибка'; badge.className = 'text-xs font-mono bg-[#e5484d]/10 text-[#e5484d] border border-[#e5484d]/25 px-2 py-0.5 rounded-[6px]'; }
                     if (info) info.textContent = d.error;
-                    preview?.classList.add('hidden');
+                    hideAnimated(preview, 'grid');
                 } else if (d.proxies && d.proxies.length) {
                     if (badge) { badge.textContent = `ТОП ${d.proxies.length}`; badge.className = 'text-xs font-mono bg-[#4cc38a]/10 text-[#4cc38a] border border-[#4cc38a]/25 px-2 py-0.5 rounded-[6px]'; }
                     if (navCnt) navCnt.textContent = String(d.proxies.length);
@@ -2946,7 +3440,7 @@
                             return btn;
                         });
                         preview.replaceChildren(...cards);
-                        preview.classList.remove('hidden');
+                        showAnimated(preview, 'grid');
                     }
                     if (updateSelect) {
                         document.querySelectorAll('select[name="bind_ip"]').forEach(sel => {
@@ -2968,7 +3462,7 @@
                     if (badge) { badge.textContent = 'Не настроена'; badge.className = 'text-xs font-mono bg-[#232325] text-[#85858b] border border-white/10 px-2 py-0.5 rounded-[6px]'; }
                     if (navCnt) navCnt.textContent = '0';
                     if (info) info.textContent = 'Ссылка подписки не задана. Вставьте её выше для запуска локальных SOCKS5-портов.';
-                    preview?.classList.add('hidden');
+                    hideAnimated(preview, 'grid');
                 }
             } catch (e) {}
         }
@@ -3083,6 +3577,137 @@
         {% endif %}
 
         // =====================================================================
+        // ОФОРМЛЕНИЕ, ПЛАВНОСТЬ И СЕКРЕТНЫЙ СТИЛЬ (Carbon Signal)
+        // =====================================================================
+        let _secretUnlockCount = 0;
+        let _secretUnlockTimer = null;
+
+        function syncAppearanceUI() {
+            const theme = document.documentElement.getAttribute('data-theme') === 'carbon-signal' ? 'carbon-signal' : 'default';
+            const unlocked = localStorage.getItem('farm_secret_theme_unlocked') === '1' || theme === 'carbon-signal';
+            const lockedBtn = document.getElementById('secret-theme-locked');
+            const unlockedBox = document.getElementById('secret-theme-unlocked');
+            const defBtn = document.getElementById('theme-btn-default');
+            const carbBtn = document.getElementById('theme-btn-carbon');
+            const defTag = document.getElementById('theme-tag-default');
+            const carbTag = document.getElementById('theme-tag-carbon');
+            const badge = document.getElementById('settings-active-theme-badge');
+
+            if (unlockedBtnBoxCheck(lockedBtn, unlockedBox, unlocked)) {
+                lockedBtn.classList.add('hidden');
+                showAnimated(unlockedBox, 'block');
+            } else if (lockedBtn && unlockedBox) {
+                unlockedBox.classList.add('hidden');
+                lockedBtn.classList.remove('hidden');
+            }
+
+            if (defBtn) {
+                defBtn.classList.toggle('border-[#3b82f6]', theme === 'default');
+                defBtn.classList.toggle('bg-[#232325]', theme === 'default');
+            }
+            if (carbBtn) {
+                carbBtn.classList.toggle('border-[#3b82f6]', theme === 'carbon-signal');
+                carbBtn.classList.toggle('bg-[#232325]', theme === 'carbon-signal');
+            }
+            if (defTag) {
+                defTag.textContent = theme === 'default' ? 'Активна' : 'Выбрать';
+                defTag.className = theme === 'default' ? 'text-[11px] font-mono text-[#4cc38a]' : 'text-[11px] font-mono text-[#85858b]';
+            }
+            if (carbTag) {
+                carbTag.textContent = theme === 'carbon-signal' ? 'Активна' : 'Открыта';
+                carbTag.className = theme === 'carbon-signal' ? 'text-[11px] font-mono text-[#4cc38a]' : 'text-[11px] font-mono text-[#85858b]';
+            }
+            if (badge) {
+                badge.textContent = theme === 'carbon-signal' ? 'Carbon Signal' : 'Графит';
+            }
+
+            const motion = localStorage.getItem('farm_motion_mode') === 'turbo' ? 'turbo' : 'smooth';
+            const bSmooth = document.getElementById('motion-btn-smooth');
+            const bTurbo = document.getElementById('motion-btn-turbo');
+            if (bSmooth) {
+                bSmooth.className = motion === 'smooth'
+                    ? 'h-7 px-2.5 rounded-[5px] text-[11px] font-mono bg-[#232325] text-[#ededed] cursor-pointer transition-colors'
+                    : 'h-7 px-2.5 rounded-[5px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors';
+            }
+            if (bTurbo) {
+                bTurbo.className = motion === 'turbo'
+                    ? 'h-7 px-2.5 rounded-[5px] text-[11px] font-mono bg-[#232325] text-[#ededed] cursor-pointer transition-colors'
+                    : 'h-7 px-2.5 rounded-[5px] text-[11px] font-mono text-[#85858b] hover:text-[#ededed] cursor-pointer transition-colors';
+            }
+        }
+
+        function unlockedBtnBoxCheck(lockedBtn, unlockedBox, unlocked) {
+            return Boolean(lockedBtn && unlockedBox && unlocked);
+        }
+
+        function applyUiTheme(themeName, silent = false) {
+            const isSecret = themeName === 'carbon-signal';
+            if (isSecret) {
+                document.documentElement.setAttribute('data-theme', 'carbon-signal');
+                localStorage.setItem('farm_ui_theme', 'carbon-signal');
+                localStorage.setItem('farm_secret_theme_unlocked', '1');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                localStorage.setItem('farm_ui_theme', 'default');
+            }
+            const mc = document.querySelector('meta[name="theme-color"]');
+            if (mc) mc.setAttribute('content', isSecret ? '#0d0e11' : '#141415');
+            syncAppearanceUI();
+            if (!silent) {
+                showToast(isSecret ? 'Включён стиль Carbon Signal' : 'Включён стиль Графит');
+            }
+        }
+
+        function handleSecretThemeClick() {
+            const counter = document.getElementById('secret-unlock-counter');
+            const locked = document.getElementById('secret-theme-locked');
+            _secretUnlockCount++;
+            if (_secretUnlockTimer) clearTimeout(_secretUnlockTimer);
+            if (locked) {
+                locked.style.transform = 'scale(0.985)';
+                setTimeout(() => { locked.style.transform = ''; }, 110);
+            }
+            if (_secretUnlockCount >= 3) {
+                _secretUnlockCount = 0;
+                if (counter) counter.textContent = '3 / 3';
+                localStorage.setItem('farm_secret_theme_unlocked', '1');
+                applyUiTheme('carbon-signal', true);
+                showToast('Секретный стиль «Carbon Signal» открыт');
+            } else {
+                if (counter) counter.textContent = `${_secretUnlockCount} / 3`;
+                _secretUnlockTimer = setTimeout(() => {
+                    _secretUnlockCount = 0;
+                    if (counter) counter.textContent = '0 / 3';
+                }, 2500);
+            }
+        }
+
+        function lockSecretTheme() {
+            localStorage.setItem('farm_secret_theme_unlocked', '0');
+            if (document.documentElement.getAttribute('data-theme') === 'carbon-signal') {
+                applyUiTheme('default', true);
+            } else {
+                syncAppearanceUI();
+            }
+            const counter = document.getElementById('secret-unlock-counter');
+            if (counter) counter.textContent = '0 / 3';
+            showToast('Секретный стиль скрыт');
+        }
+
+        function setMotionMode(mode) {
+            const isTurbo = mode === 'turbo';
+            if (isTurbo) {
+                document.documentElement.setAttribute('data-motion', 'turbo');
+                localStorage.setItem('farm_motion_mode', 'turbo');
+            } else {
+                document.documentElement.removeAttribute('data-motion');
+                localStorage.setItem('farm_motion_mode', 'smooth');
+            }
+            syncAppearanceUI();
+            showToast(isTurbo ? 'Скорость анимаций: Турбо' : 'Скорость анимаций: Плавные');
+        }
+
+        // =====================================================================
         // ПАСХАЛКА (5 кликов на v5.0)
         // =====================================================================
         let _easterEggClicks = 0;
@@ -3108,6 +3733,7 @@
         function showEasterEggModal() {
             const modal = document.getElementById('easter-egg-modal');
             if (!modal) return;
+            modal.removeAttribute('data-closing');
             _lastEasterEggOpenedAt = Date.now();
             if (typeof modal.showModal === 'function') {
                 if (!modal.open) modal.showModal();
@@ -3116,12 +3742,29 @@
             }
         }
 
+        async function closeTopLayer(modal) {
+            if (!modal) return;
+            if (!supportsTopLayerExit()) {
+                modal.setAttribute('data-closing', '');
+                const animations = typeof modal.getAnimations === 'function' ? modal.getAnimations({ subtree: true }) : [];
+                if (animations.length > 0) {
+                    await Promise.race([
+                        Promise.allSettled(animations.map(a => a.finished)),
+                        new Promise(r => setTimeout(r, 340)),
+                    ]);
+                }
+                if (!modal.hasAttribute('data-closing')) return;
+                modal.removeAttribute('data-closing');
+            }
+            if (typeof modal.close === 'function') modal.close();
+            else modal.removeAttribute('open');
+        }
+
         function closeEasterEgg() {
             if (Date.now() - _lastEasterEggOpenedAt < 350) return;
             const modal = document.getElementById('easter-egg-modal');
             if (!modal) return;
-            if (typeof modal.close === 'function') modal.close();
-            else modal.removeAttribute('open');
+            closeTopLayer(modal);
         }
 
         const _eeModal = document.getElementById('easter-egg-modal');
@@ -3130,10 +3773,11 @@
         }
 
         // Инициализация при старте
+        syncAppearanceUI();
         const urlParams = new URLSearchParams(window.location.search);
         const currentTab = urlParams.get('tab');
         if (currentTab && ['main', 'network', 'vouchers', 'tempmail', 'node-view', 'trash', 'settings'].includes(currentTab)) {
-            switchTab(currentTab);
+            switchTab(currentTab, true);
         }
 
         fetchLogs(true);

@@ -15,9 +15,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('farm_ui_theme') === 'carbon-signal') {
+                    document.documentElement.setAttribute('data-theme', 'carbon-signal');
+                    const mc = document.querySelector('meta[name="theme-color"]');
+                    if (mc) mc.setAttribute('content', '#0d0e11');
+                }
+                if (localStorage.getItem('farm_motion_mode') === 'turbo') {
+                    document.documentElement.setAttribute('data-motion', 'turbo');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
+            color-scheme: dark;
             --bg-sidebar: #0f0f10;
             --bg-page: #141415;
             --bg-card: #19191b;
@@ -32,7 +47,50 @@
             --positive: #4cc38a;
             --negative: #e5484d;
             --ease: cubic-bezier(0.22, 1, 0.36, 1);
+            --dur-fast: 150ms;
+            --dur-med: 240ms;
         }
+
+        :root[data-motion="turbo"] {
+            --dur-fast: 90ms;
+            --dur-med: 145ms;
+        }
+
+        html[data-theme="carbon-signal"] {
+            --bg-sidebar: #090a0c;
+            --bg-page: #0d0e11;
+            --bg-card: #131519;
+            --bg-raised: #1a1d24;
+            --border: rgba(244, 241, 234, 0.09);
+            --border-hover: rgba(234, 126, 30, 0.34);
+            --text-primary: #f4f1ea;
+            --text-secondary: #aba9a0;
+            --text-muted: #91908a;
+            --accent: #ea7e1e;
+            --accent-ring: rgba(234, 126, 30, 0.28);
+            --positive: #3fd88f;
+            --negative: #f05252;
+        }
+
+        html[data-theme="carbon-signal"] body {
+            background-image: radial-gradient(rgba(244, 241, 234, 0.055) 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: -1px -1px;
+        }
+
+        html[data-theme="carbon-signal"] .surface-card {
+            box-shadow: inset 0 1px 0 rgba(244, 241, 234, 0.055), 0 14px 36px rgba(0, 0, 0, 0.4);
+        }
+
+        html[data-theme="carbon-signal"] .btn-primary {
+            box-shadow: inset 0 1px 0 #ffffff, 0 2px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        html[data-theme="carbon-signal"] .text-\[\#ededed\] { color: var(--text-primary); }
+        html[data-theme="carbon-signal"] .text-\[\#a1a1a6\] { color: var(--text-secondary); }
+        html[data-theme="carbon-signal"] .text-\[\#85858b\] { color: var(--text-muted); }
+        html[data-theme="carbon-signal"] .bg-\[\#232325\] { background-color: var(--bg-raised); }
+        html[data-theme="carbon-signal"] .bg-\[\#0f0f10\] { background-color: var(--bg-sidebar); }
 
         * { box-sizing: border-box; }
 
@@ -145,17 +203,57 @@
             max-width: 480px;
             width: calc(100% - 32px);
             margin: auto;
+            opacity: 0;
+            transform: scale(0.94) translateY(8px);
+            transition-property: opacity, transform, display, overlay;
+            transition-duration: var(--dur-med);
+            transition-timing-function: var(--ease);
+            transition-behavior: allow-discrete;
+        }
+        dialog.console-dialog[open]:where(:not([data-closing])) {
+            opacity: 1;
+            transform: scale(1) translateY(0);
         }
 
         dialog.console-dialog::backdrop {
-            background: rgba(9, 9, 11, 0.78);
+            background-color: rgba(9, 9, 11, 0);
+            backdrop-filter: blur(0px);
+            transition-property: background-color, backdrop-filter, display, overlay;
+            transition-duration: var(--dur-med);
+            transition-timing-function: var(--ease);
+            transition-behavior: allow-discrete;
+        }
+        dialog.console-dialog[open]:where(:not([data-closing]))::backdrop {
+            background-color: rgba(9, 9, 11, 0.78);
             backdrop-filter: blur(4px);
         }
 
+        @starting-style {
+            dialog.console-dialog[open]:where(:not([data-closing])) {
+                opacity: 0;
+                transform: scale(0.94) translateY(8px);
+            }
+            dialog.console-dialog[open]:where(:not([data-closing]))::backdrop {
+                background-color: rgba(9, 9, 11, 0);
+                backdrop-filter: blur(0px);
+            }
+        }
+
         @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                transition-duration: 0.01ms !important;
+            :root {
+                --dur-fast: 80ms;
+                --dur-med: 100ms;
+            }
+            .surface-card,
+            .error-shake {
+                animation: none !important;
+            }
+            dialog.console-dialog,
+            dialog.console-dialog[open]:where(:not([data-closing])) {
+                transform: none !important;
+            }
+            .btn-primary:active {
+                transform: none !important;
             }
         }
     </style>
@@ -371,9 +469,30 @@
             }
         }
 
+        let _supportsDisplayTransition;
+        function canTransitionDisplay() {
+            if (_supportsDisplayTransition !== undefined) return _supportsDisplayTransition;
+            if (!window.CSS?.supports?.('transition-behavior', 'allow-discrete') || !document.body) {
+                return false;
+            }
+            const probe = document.createElement('div');
+            probe.style.cssText = 'transition: display 1s allow-discrete !important; display: block;';
+            document.body.appendChild(probe);
+            getComputedStyle(probe).display;
+            probe.style.display = 'none';
+            _supportsDisplayTransition = getComputedStyle(probe).display === 'block';
+            probe.remove();
+            return _supportsDisplayTransition;
+        }
+
+        function supportsTopLayerExit() {
+            return window.CSS?.supports?.('overlay', 'auto') && canTransitionDisplay();
+        }
+
         function showEasterEggModal() {
             const modal = document.getElementById('easter-egg-modal');
             if (!modal) return;
+            modal.removeAttribute('data-closing');
             _lastEasterEggOpenedAt = Date.now();
             if (typeof modal.showModal === 'function') {
                 if (!modal.open) modal.showModal();
@@ -382,10 +501,22 @@
             }
         }
 
-        function closeEasterEgg() {
+        async function closeEasterEgg() {
             if (Date.now() - _lastEasterEggOpenedAt < 350) return;
             const modal = document.getElementById('easter-egg-modal');
             if (!modal) return;
+            if (!supportsTopLayerExit()) {
+                modal.setAttribute('data-closing', '');
+                const anims = typeof modal.getAnimations === 'function' ? modal.getAnimations({ subtree: true }) : [];
+                if (anims.length > 0) {
+                    await Promise.race([
+                        Promise.allSettled(anims.map(a => a.finished)),
+                        new Promise(r => setTimeout(r, 340)),
+                    ]);
+                }
+                if (!modal.hasAttribute('data-closing')) return;
+                modal.removeAttribute('data-closing');
+            }
             if (typeof modal.close === 'function') {
                 modal.close();
             } else {
