@@ -98,13 +98,18 @@ from telethon import TelegramClient, events
 from telethon.errors import (
     AuthKeyDuplicatedError,
     AuthKeyUnregisteredError,
+    ChannelsTooMuchError,
     ChatWriteForbiddenError,
     FloodWaitError,
+    InviteRequestSentError,
     PhoneNumberBannedError,
     SessionRevokedError,
+    UserAlreadyParticipantError,
     UserDeactivatedBanError,
     UserDeactivatedError,
     UserRestrictedError,
+    UsernameInvalidError,
+    UsernameNotOccupiedError,
 )
 from telethon.tl.functions.account import UpdateStatusRequest
 from telethon.tl.functions.channels import JoinChannelRequest
@@ -115,6 +120,7 @@ from telethon.tl.functions.messages import (
     SetTypingRequest,
 )
 from telethon.tl.types import (
+    Channel,
     MessageEntityCode,
     MessageEntityPre,
     ReactionEmoji,
@@ -175,6 +181,9 @@ _warmup_flood_until = {}
 _warmup_last_typing_at = {}
 _warmup_active_sessions = set()
 _warmup_auto_sem = asyncio.Semaphore(3)
+_onboarding_sem = asyncio.Semaphore(2)
+_onboarding_active_sessions = set()
+_onboarding_retry_after = {}
 autowithdraw_locks = set()
 _global_bot_withdraw_lock = asyncio.Lock()
 WITHDRAW_LOCK_FILE = os.path.join(DATA_DIR, ".withdraw_transfer.lock")
@@ -375,6 +384,8 @@ def load_settings() -> dict:
         "warmup_mode": "mega",
         "warmup_night_quiet": True,
         "warmup_channels": "telegram, durov",
+        "auto_join_warmup_channels": True,
+        "auto_start_target_bot": True,
         "last_warmup_at": "",
     }
     for p in [os.path.join(DATA_DIR, "config.json"), os.path.join(BASE_DIR, "config.json")]:
@@ -1448,11 +1459,18 @@ def parse_warmup_channels(raw_channels: str, include_mega_pool: bool = False) ->
     if not raw_channels:
         base = ["telegram", "durov"]
     else:
-        base = [
-            c.strip().lstrip("@").replace("https://t.me/", "").split("/")[0]
+        raw_items = [
+            c.strip().lstrip("@").replace("https://t.me/", "").replace("http://t.me/", "").split("/")[0]
             for c in re.split(r"[,;\s]+", raw_channels)
             if c.strip()
         ]
+        seen_base = set()
+        base = []
+        for item in raw_items:
+            low = item.lower()
+            if item and low not in seen_base:
+                seen_base.add(low)
+                base.append(item)
         if not base:
             base = ["telegram", "durov"]
     if not include_mega_pool:
@@ -1464,6 +1482,171 @@ def parse_warmup_channels(raw_channels: str, include_mega_pool: bool = False) ->
             seen.add(ch.lower())
             merged.append(ch)
     return merged
+
+
+def _record_account_onboarding_state(
+    sess_name: str,
+    started_bot: str | None = None,
+    joined_channel: str | None = None,
+):
+    if not sess_name or sess_name == "unknown":
+        return
+    try:
+        accs = load_accounts()
+        changed = False
+        for a in accs:
+            if str(a.get("session", "")).strip() != sess_name:
+                continue
+            if started_bot:
+                cur_bots = [str(x).strip().lower() for x in (a.get("started_bots") or []) if str(x).strip()]
+                b_low = started_bot.strip().lstrip("@").lower()
+                if b_low and b_low not in cur_bots:
+                    cur_bots.append(b_low)
+                    a["started_bots"] = cur_bots
+                    changed = True
+            if joined_channel:
+                cur_chs = [str(x).strip().lower() for x in (a.get("joined_channels") or []) if str(x).strip()]
+                c_low = joined_channel.strip().lstrip("@").lower()
+                if c_low and c_low not in cur_chs:
+                    cur_chs.append(c_low)
+                    a["joined_channels"] = cur_chs
+                    changed = True
+            break
+        if changed:
+            save_accounts(accs)
+    except Exception:
+        pass
+
+
+async def ensure_bot_started(
+    client: TelegramClient,
+    sess_name: str,
+    target_bot: str,
+    persist_account: bool = True,
+) -> bool:
+    bot_clean = str(target_bot or "").strip().lstrip("@")
+    if not bot_clean:
+        return False
+    retry_key = (sess_name, f"bot:{bot_clean.lower()}")
+    now = time.time()
+    if now < _onboarding_retry_after.get(retry_key, 0.0) or now < _warmup_flood_until.get(sess_name, 0.0):
+        return False
+
+    try:
+        peer = target_peers.get(client)
+        if not peer:
+            peer = await client.get_input_entity(bot_clean)
+            target_peers[client] = peer
+        hist = await client.get_messages(peer, limit=1)
+        if hist and len(hist) > 0:
+            if persist_account:
+                _record_account_onboarding_state(sess_name, started_bot=bot_clean)
+            return True
+
+        await asyncio.sleep(random.uniform(1.0, 2.5))
+        await client.send_message(peer, "/start")
+        if persist_account:
+            _record_account_onboarding_state(sess_name, started_bot=bot_clean)
+        print(f"[AUTO-START] [{sess_name}] Нажат /start на боте @{bot_clean}", flush=True)
+        return True
+    except FloodWaitError as fw:
+        cooldown = int(getattr(fw, "seconds", 60) or 60) + random.randint(60, 180)
+        _warmup_flood_until[sess_name] = time.time() + cooldown
+        _onboarding_retry_after[retry_key] = _warmup_flood_until[sess_name]
+        print(f"[WARN] [AUTO-START] [{sess_name}] FloodWait {fw.seconds}с на @{bot_clean} -> пауза {cooldown}с", flush=True)
+        return False
+    except Exception as e:
+        _onboarding_retry_after[retry_key] = time.time() + 900.0
+        print(f"[WARN] [AUTO-START] [{sess_name}] @{bot_clean}: {e}", flush=True)
+        return False
+
+
+async def ensure_channels_subscribed(
+    client: TelegramClient,
+    sess_name: str,
+    channels: list[str],
+    persist_account: bool = True,
+    delay_bounds: tuple[float, float] = (2.5, 6.5),
+) -> int:
+    if not channels:
+        return 0
+    joined_set = set()
+    if persist_account:
+        for a in load_accounts():
+            if str(a.get("session", "")).strip() == sess_name:
+                joined_set = {str(x).strip().lower() for x in (a.get("joined_channels") or []) if str(x).strip()}
+                break
+
+    pending = [ch.strip().lstrip("@") for ch in channels if ch and ch.strip().lstrip("@")]
+    random.shuffle(pending)
+    joined_now = 0
+
+    for ch_clean in pending:
+        ch_low = ch_clean.lower()
+        retry_key = (sess_name, f"ch:{ch_low}")
+        now = time.time()
+        if ch_low in joined_set or now < _onboarding_retry_after.get(retry_key, 0.0) or now < _warmup_flood_until.get(sess_name, 0.0):
+            continue
+        try:
+            entity = await client.get_entity(ch_clean)
+            if not isinstance(entity, Channel):
+                _onboarding_retry_after[retry_key] = time.time() + 12 * 3600.0
+                continue
+            if getattr(entity, "left", True) is False:
+                joined_set.add(ch_low)
+                if persist_account:
+                    _record_account_onboarding_state(sess_name, joined_channel=ch_clean)
+                continue
+
+            await asyncio.sleep(random.uniform(*delay_bounds))
+            await client(JoinChannelRequest(entity))
+            joined_set.add(ch_low)
+            joined_now += 1
+            if persist_account:
+                _record_account_onboarding_state(sess_name, joined_channel=ch_clean)
+            print(f"[AUTO-JOIN] [{sess_name}] Подписался на канал @{ch_clean}", flush=True)
+        except (UserAlreadyParticipantError, InviteRequestSentError):
+            joined_set.add(ch_low)
+            if persist_account:
+                _record_account_onboarding_state(sess_name, joined_channel=ch_clean)
+        except FloodWaitError as fw:
+            cooldown = int(getattr(fw, "seconds", 60) or 60) + random.randint(60, 180)
+            _warmup_flood_until[sess_name] = time.time() + cooldown
+            _onboarding_retry_after[retry_key] = _warmup_flood_until[sess_name]
+            print(f"[WARN] [AUTO-JOIN] [{sess_name}] FloodWait {fw.seconds}с при подписке @{ch_clean} -> пауза {cooldown}с", flush=True)
+            break
+        except ChannelsTooMuchError:
+            for rest_ch in pending:
+                _onboarding_retry_after[(sess_name, f"ch:{rest_ch.lower()}")] = time.time() + 6 * 3600.0
+            print(f"[WARN] [AUTO-JOIN] [{sess_name}] Лимит подписок Telegram (ChannelsTooMuch)", flush=True)
+            break
+        except (UsernameInvalidError, UsernameNotOccupiedError):
+            _onboarding_retry_after[retry_key] = time.time() + 12 * 3600.0
+            print(f"[WARN] [AUTO-JOIN] [{sess_name}] Канал @{ch_clean} не найден", flush=True)
+        except Exception as e:
+            _onboarding_retry_after[retry_key] = time.time() + 1800.0
+            print(f"[WARN] [AUTO-JOIN] [{sess_name}] @{ch_clean}: {e}", flush=True)
+
+    return joined_now
+
+
+async def _ensure_account_onboarding(
+    client: TelegramClient,
+    sess_name: str,
+    target_bot: str | None,
+    join_targets: list[str],
+):
+    try:
+        await asyncio.sleep(random.uniform(1.2, 5.5))
+        async with _onboarding_sem:
+            if client not in session_to_client.values():
+                return
+            if target_bot:
+                await ensure_bot_started(client, sess_name, target_bot, persist_account=True)
+            if join_targets:
+                await ensure_channels_subscribed(client, sess_name, join_targets, persist_account=True)
+    finally:
+        _onboarding_active_sessions.discard(sess_name)
 
 
 def _schedule_next_warmup(
@@ -1737,6 +1920,15 @@ async def warmup_single_client(
                 steps.append("онлайн")
             await asyncio.sleep(random.uniform(1.0, 2.2))
             await _warmup_app_boot(client, sess_name, steps)
+            if persist_account:
+                cur_cfg = load_settings()
+                if cur_cfg.get("auto_start_target_bot", True):
+                    await ensure_bot_started(client, sess_name, cur_cfg.get("target_bot", ""), persist_account=True)
+                if cur_cfg.get("auto_join_warmup_channels", True):
+                    explicit_chs = parse_warmup_channels(cur_cfg.get("warmup_channels", "telegram, durov"), include_mega_pool=False)
+                    joined_cnt = await ensure_channels_subscribed(client, sess_name, explicit_chs, persist_account=True)
+                    if joined_cnt > 0:
+                        steps.append(f"подписка +{joined_cnt}")
 
         max_channels = random.randint(1, min(2, len(pool))) if warmup_mode == "mega" else 1
         done_channels = 0
@@ -2330,6 +2522,39 @@ async def sync_accounts_and_settings():
         for c in clients:
             if c not in target_set:
                 await init_client_target(c, target_bot, source_channel)
+
+    # Автоподписка на указанные каналы и авто-нажатие /start на целевом боте (плавно в фоне)
+    auto_join_enabled = bool(settings.get("auto_join_warmup_channels", True))
+    auto_start_enabled = bool(settings.get("auto_start_target_bot", True))
+    if auto_join_enabled or auto_start_enabled:
+        explicit_chs = parse_warmup_channels(settings.get("warmup_channels", "telegram, durov"), include_mega_pool=False) if auto_join_enabled else []
+        if auto_join_enabled and source_channel and source_channel.lower() not in {x.lower() for x in explicit_chs}:
+            explicit_chs.append(source_channel)
+        now_ts = time.time()
+        target_low = target_bot.lower() if target_bot else ""
+        for s_name, acc in desired_sessions.items():
+            c = session_to_client.get(s_name)
+            if not c or s_name in _onboarding_active_sessions or now_ts < _warmup_flood_until.get(s_name, 0.0):
+                continue
+            started_bots = {str(x).strip().lower() for x in (acc.get("started_bots") or []) if str(x).strip()}
+            joined_chs = {str(x).strip().lower() for x in (acc.get("joined_channels") or []) if str(x).strip()}
+            need_bot = (
+                target_bot
+                if (
+                    auto_start_enabled
+                    and target_low
+                    and target_low not in started_bots
+                    and now_ts >= _onboarding_retry_after.get((s_name, f"bot:{target_low}"), 0.0)
+                )
+                else None
+            )
+            missing_chs = [
+                ch for ch in explicit_chs
+                if ch.lower() not in joined_chs and now_ts >= _onboarding_retry_after.get((s_name, f"ch:{ch.lower()}"), 0.0)
+            ]
+            if need_bot or missing_chs:
+                _onboarding_active_sessions.add(s_name)
+                asyncio.create_task(_ensure_account_onboarding(c, s_name, need_bot, missing_chs))
 
     # Проверяем, есть ли аккаунты с балансом >= порога авто-вывода
     if settings.get("auto_withdraw_enabled", True) and settings.get("site_withdraw_login", "").strip():

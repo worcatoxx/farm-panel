@@ -285,6 +285,8 @@ def load_settings() -> dict:
         "warmup_mode": "mega",
         "warmup_night_quiet": True,
         "warmup_channels": "telegram, durov",
+        "auto_join_warmup_channels": True,
+        "auto_start_target_bot": True,
         "last_warmup_at": "",
         "nodes": [],
     }
@@ -2279,6 +2281,8 @@ def save_settings_route():
     settings["warmup_mode"] = "normal" if request.form.get("warmup_mode") == "normal" else "mega"
     settings["warmup_night_quiet"] = bool(request.form.get("warmup_night_quiet"))
     settings["warmup_channels"] = request.form.get("warmup_channels", "telegram, durov").strip() or "telegram, durov"
+    settings["auto_join_warmup_channels"] = bool(request.form.get("auto_join_warmup_channels"))
+    settings["auto_start_target_bot"] = bool(request.form.get("auto_start_target_bot"))
     settings["push_notifications_enabled"] = bool(request.form.get("push_notifications_enabled"))
     settings["radar_teaser_enabled"] = bool(request.form.get("radar_teaser_enabled"))
     save_settings(settings)

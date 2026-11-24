@@ -1510,6 +1510,22 @@
                                         <div class="text-xs font-mono text-[#85858b] shrink-0">Последний прогрев: <span class="text-[#4cc38a]">{{ settings.last_warmup_at }}</span></div>
                                         {% endif %}
                                     </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <div class="text-xs text-[#ededed]">Автоподписка на каналы выше</div>
+                                                <div class="text-[11px] text-[#85858b]">Плавное вступление в указанные каналы</div>
+                                            </div>
+                                            <input type="checkbox" name="auto_join_warmup_channels" value="1" {% if settings.auto_join_warmup_channels is not defined or settings.auto_join_warmup_channels %}checked{% endif %} aria-label="Автоподписка на каналы">
+                                        </div>
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <div class="text-xs text-[#ededed]">Авто-/start на @{{ settings.target_bot or 'Virtnumber_buy_bot' }}</div>
+                                                <div class="text-[11px] text-[#85858b]">Активирует бота для новых аккаунтов</div>
+                                            </div>
+                                            <input type="checkbox" name="auto_start_target_bot" value="1" {% if settings.auto_start_target_bot is not defined or settings.auto_start_target_bot %}checked{% endif %} aria-label="Автостарт целевого бота">
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="card-sub p-4 flex flex-col gap-3">
