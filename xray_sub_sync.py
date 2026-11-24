@@ -44,11 +44,15 @@ def fetch_subscription(url: str, hwid: str = "") -> str:
     raise RuntimeError("Не удалось скачать подписку")
 
 
-def fetch_reserved_ips(exclude_url: str) -> set[str]:
+def fetch_reserved_ips(exclude_url: str, client_id: str = "") -> set[str]:
     if not exclude_url:
         return set()
+    req_url = exclude_url.strip()
+    if client_id and "client_id=" not in req_url:
+        sep = "&" if "?" in req_url else "?"
+        req_url = f"{req_url}{sep}client_id={urllib.parse.quote(client_id)}"
     try:
-        raw = urllib.request.urlopen(urllib.request.Request(exclude_url, headers={"User-Agent": "FarmBot-Sync/1.0"}), timeout=8).read().decode("utf-8", errors="ignore")
+        raw = urllib.request.urlopen(urllib.request.Request(req_url, headers={"User-Agent": "FarmBot-Sync/1.0"}), timeout=8).read().decode("utf-8", errors="ignore")
         ips = {str(x).strip() for x in json.loads(raw).get("reserved", []) if str(x).strip()}
         if ips:
             os.makedirs(DATA_DIR, exist_ok=True)
@@ -133,12 +137,15 @@ def _extract_hp(ob: dict):
 def _dedup(nodes: list) -> list:
     seen, clean = set(), []
     for n in nodes:
-        addr, low = n["address"], n["remark"].lower()
-        if addr in ("127.0.0.1", "0.0.0.0", "localhost") or any(k in low for k in SKIP_KW) or addr in seen:
+        addr, port = n["address"], int(n["port"])
+        low = n["remark"].lower()
+        key = (addr, port)
+        if addr in ("127.0.0.1", "0.0.0.0", "localhost") or any(k in low for k in SKIP_KW) or key in seen:
             continue
-        seen.add(addr)
+        seen.add(key)
         n["is_eu"] = any(h in low for h in EU_HINTS)
-        n["remark_short"] = re.sub(r"[▶️⚡🔥]", "", n["remark"]).strip()[:28]
+        cleaned = re.sub(r"[▶️⚡🔥💫💎🚀✨🌟🎯]+", "", n["remark"])
+        n["remark_short"] = re.sub(r"\s{2,}", " ", cleaned).strip()[:28]
         fm = re.match(r"^([^\w\s]{1,4}\s*[^\s•|]+)", n["remark_short"])
         n["country_prefix"] = fm.group(1) if fm else ""
         clean.append(n)
@@ -316,10 +323,10 @@ async def _http_ipify_probe(port: int, timeout: float = 4.0) -> str | None:
 
 async def e2e_ip_probe(port: int, node: dict, sem: asyncio.Semaphore):
     async with sem:
-        exit_ip = await _http_ipify_probe(port, timeout=4.0)
+        exit_ip = await _http_ipify_probe(port, timeout=2.5)
         if not exit_ip:
             return node, None, None
-        tg_ms = await fast_tg_probe(port, timeout=4.0)
+        tg_ms = await fast_tg_probe(port, timeout=2.5)
         if tg_ms is None:
             return node, None, None
         return node, tg_ms, exit_ip
@@ -373,12 +380,21 @@ async def verify_cands_batched(cands: list, batch_size: int = 45) -> list:
 
 def filter_for_tier(unique_alive: list, tier: int, friends: int, reserved_ips: set[str]) -> list:
     if tier <= 0:
-        return unique_alive
+        return sorted(unique_alive, key=lambda x: x["ping_ms"])
     pool = [n for n in unique_alive if n["exit_ip"] not in reserved_ips and n["address"] not in reserved_ips]
-    if friends <= 1:
-        return pool
-    bucket_idx = (tier - 1) % friends
-    return [n for n in pool if (int(hashlib.md5(n["exit_ip"].encode()).hexdigest(), 16) % friends) == bucket_idx]
+    pool.sort(key=lambda x: x["ping_ms"])
+    if not pool:
+        return []
+    buckets = max(int(friends or 1), 4)
+    bucket_idx = (int(tier) - 1) % buckets
+    preferred = []
+    overflow = []
+    for n in pool:
+        if (int(hashlib.md5(n["exit_ip"].encode()).hexdigest(), 16) % buckets) == bucket_idx:
+            preferred.append(n)
+        else:
+            overflow.append(n)
+    return preferred + overflow
 
 
 def _atomic_write_text(path: str, content: str):
@@ -444,6 +460,9 @@ def save_and_apply(meta: dict, slots_map: dict):
         "friends": meta["friends"],
         "exclude_url": meta["exclude_url"],
         "target_size": int(meta.get("target_size") or len(ordered) or 25),
+        "sub_total": int(meta.get("sub_total") or 0),
+        "tcp_total": int(meta.get("tcp_total") or 0),
+        "alive_total": int(meta.get("alive_total") or 0),
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "pool_size": len(ordered),
         "slots": {
@@ -502,6 +521,9 @@ def _load_meta_and_prev(args):
         "friends": args.friends if args.friends is not None else int(prev_data.get("friends", 1) or 1),
         "exclude_url": args.exclude_url if args.exclude_url is not None else prev_data.get("exclude_url", ""),
         "target_size": target_size,
+        "sub_total": int(prev_data.get("sub_total", 0) or 0),
+        "tcp_total": int(prev_data.get("tcp_total", 0) or 0),
+        "alive_total": int(prev_data.get("alive_total", 0) or 0),
     }
     return meta, prev_data.get("slots", {})
 
@@ -509,7 +531,7 @@ def _load_meta_and_prev(args):
 async def full_sync(meta: dict, prev_slots: dict, pool_size: int, base_port: int, rotate_all: bool, scan_all: bool):
     os.makedirs(DATA_DIR, exist_ok=True); os.makedirs(XRAY_CONF_DIR, exist_ok=True)
     all_nodes = parse_subscription(fetch_subscription(meta["sub_url"], meta["hwid"]))
-    print(f"[*] В подписке найдено конфигов (уник. вход): {len(all_nodes)}. Проверка TCP...", flush=True)
+    print(f"[*] В подписке найдено конфигов: {len(all_nodes)}. Полная TCP-проверка...", flush=True)
     sem = asyncio.Semaphore(50)
     tcp_alive = sorted(
         [(n, ms) for n, ms in await asyncio.gather(*[tcp_probe(n, sem) for n in all_nodes]) if ms is not None],
@@ -517,21 +539,26 @@ async def full_sync(meta: dict, prev_slots: dict, pool_size: int, base_port: int
     )
 
     cands = [n for n, _ in tcp_alive]
-    c_addrs = {n["address"] for n in cands}
+    c_keys = {(n["address"], int(n["port"])) for n in cands}
     for v in prev_slots.values():
-        if v.get("address") and v["address"] not in c_addrs:
+        if v.get("address") and v.get("port") and (v["address"], int(v["port"])) not in c_keys:
             for n, _ in tcp_alive:
-                if n["address"] == v["address"]:
-                    cands.append(n); c_addrs.add(n["address"])
+                if n["address"] == v["address"] and int(n["port"]) == int(v["port"]):
+                    cands.append(n); c_keys.add((n["address"], int(n["port"])))
 
     print(f"[*] Сквозной Xray-тест всех {len(cands)} TCP-живых узлов (ipify -> прогретый Telegram HEAD)...", flush=True)
     unique_alive = await verify_cands_batched(cands, batch_size=45)
-    print(f"[OK] Живых серверов с УНИКАЛЬНЫМ выходным IP: {len(unique_alive)}", flush=True)
+    print(f"[OK] Живых серверов с УНИКАЛЬНЫМ IP: {len(unique_alive)} из {len(all_nodes)}", flush=True)
 
-    reserved = fetch_reserved_ips(meta["exclude_url"]) if (meta["tier"] > 0 or meta.get("exclude_url")) else set()
+    meta["sub_total"] = len(all_nodes)
+    meta["tcp_total"] = len(tcp_alive)
+    meta["alive_total"] = len(unique_alive)
+
+    my_cid = get_machine_id_hash()
+    reserved = fetch_reserved_ips(meta["exclude_url"], client_id=my_cid) if (meta["tier"] > 0 or meta.get("exclude_url")) else set()
     tier_pool = filter_for_tier(unique_alive, meta["tier"], meta["friends"], reserved)
     if meta["tier"] > 0:
-        print(f"[*] Исключено {len(reserved)} IP владельца -> в корзине (Друг #{meta['tier']} из {meta['friends']}): {len(tier_pool)} уник. IP", flush=True)
+        print(f"[*] Исключено {len(reserved)} занятых IP (владелец + друзья) -> в пуле друга (tier={meta['tier']}): {len(tier_pool)} уник. IP", flush=True)
     if not tier_pool:
         raise RuntimeError("В корзине не осталось свободных уникальных IP!")
 
@@ -550,7 +577,7 @@ async def full_sync(meta: dict, prev_slots: dict, pool_size: int, base_port: int
             if (
                 cand
                 and cand.get("ping_ms") is not None
-                and float(cand["ping_ms"]) <= 250.0
+                and float(cand["ping_ms"]) <= 200.0
                 and cand["exit_ip"] not in used_exit
                 and cand["address"] not in used_addr
             ):
@@ -562,8 +589,10 @@ async def full_sync(meta: dict, prev_slots: dict, pool_size: int, base_port: int
             c = free.pop(0); slots[p] = c; used_exit.add(c["exit_ip"]); used_addr.add(c["address"])
 
     save_and_apply(meta, slots)
-    for p in sorted(slots)[:10]:
-        print(f"  127.0.0.1:{p} -> {slots[p]['remark_short']} | IP: {slots[p]['exit_ip']} | {slots[p]['ping_ms']} ms", flush=True)
+    top_preview = sorted(slots.items(), key=lambda kv: kv[1].get("ping_ms") if kv[1].get("ping_ms") is not None else 99999)
+    print(f"[OK] Отобрано ТОП-{len(slots)} быстрых портов:", flush=True)
+    for rank, (p, sl) in enumerate(top_preview[:10], 1):
+        print(f"  #{rank} 127.0.0.1:{p} -> {sl['remark_short']} | IP: {sl['exit_ip']} | {sl['ping_ms']} ms", flush=True)
     return slots, all_nodes
 
 
@@ -676,7 +705,7 @@ async def watchdog_daemon(args, base_port: int, interval: int, recheck: int):
                     bad_set = set(bad_ports)
                     used_addr = {v["address"] for k, v in slots.items() if k not in bad_set}
                     used_exit = {v.get("exit_ip", "") for k, v in slots.items() if k not in bad_set}
-                    reserved = fetch_reserved_ips(meta["exclude_url"]) if (meta["tier"] > 0 or meta.get("exclude_url")) else set()
+                    reserved = fetch_reserved_ips(meta["exclude_url"], client_id=get_machine_id_hash()) if (meta["tier"] > 0 or meta.get("exclude_url")) else set()
                     s_tcp = asyncio.Semaphore(40)
                     cands_tcp = sorted(
                         [(n, ms) for n, ms in await asyncio.gather(*[tcp_probe(n, s_tcp) for n in cached if n["address"] not in used_addr and n["address"] not in reserved]) if ms is not None],

@@ -228,13 +228,19 @@ def load_xray_proxies() -> list[dict]:
         out = []
         for ps, inf in sorted(slots.items(), key=_proxy_ping_sort_key):
             ex = inf.get("exit_ip") or inf.get("address") or f"127.0.0.1:{ps}"
-            ms = f", {inf['ping_ms']}ms" if inf.get("ping_ms") is not None else ""
+            raw_name = str(inf.get("remark_short") or inf.get("remark") or "VPN")
+            clean_name = re.sub(r"[▶️⚡🔥💫💎🚀✨🌟🎯|]+", " ", raw_name)
+            clean_name = re.sub(r"\s{2,}", " ", clean_name).strip()[:26] or "VPN"
+            ping_val = inf.get("ping_ms")
+            ms_prefix = f"{int(round(float(ping_val)))}ms • " if ping_val is not None else ""
             out.append({
                 "bind": f"socks5://127.0.0.1:{ps}",
+                "port": int(ps) if str(ps).isdigit() else 0,
                 "public": ex,
-                "label": f"VPN :{ps} • {inf.get('remark_short','VPN')} [{ex}{ms}]",
+                "name": clean_name,
+                "label": f"{ms_prefix}:{ps} • {clean_name} ({ex})",
                 "is_proxy": True,
-                "ping_ms": inf.get("ping_ms"),
+                "ping_ms": ping_val,
             })
         return out
     except Exception: return []
@@ -682,12 +688,25 @@ def _read_json_dict(path: str) -> dict:
 @app.route("/api/xray-reserved-ips")
 def api_xray_reserved_ips():
     tok = request.args.get("token", "").strip()
+    req_cid = request.args.get("client_id", "").strip()
     data = _read_json_dict(os.path.join(DATA_DIR, "xray_proxies.json"))
     exp = data.get("share_token", "")
     if not tok or (tok != "wcatox_share_auto" and (not exp or tok != exp)):
         return jsonify({"error": "forbidden"}), 403
-    ips = sorted({v for inf in data.get("slots", {}).values() for v in (inf.get("exit_ip"), inf.get("address")) if v})
-    return jsonify({"reserved": ips, "count": len(data.get("slots", {}))})
+    ips = {v for inf in data.get("slots", {}).values() for v in (inf.get("exit_ip"), inf.get("address")) if v}
+    peers_count = 0
+    now = time.time()
+    cmap = _read_json_dict(CODE_CLIENTS_FILE)
+    for cid, cinfo in cmap.items():
+        if req_cid and cid == req_cid:
+            continue
+        if (now - float(cinfo.get("last_seen_ts", 0) or 0)) > 21600:
+            continue
+        peer_ips = [str(x).strip() for x in (cinfo.get("exit_ips") or []) if str(x).strip()]
+        if peer_ips:
+            peers_count += 1
+            ips.update(peer_ips)
+    return jsonify({"reserved": sorted(ips), "count": len(data.get("slots", {})), "peers": peers_count})
 
 @app.route("/api/client-heartbeat", methods=["POST"])
 def api_client_heartbeat():
@@ -706,7 +725,7 @@ def api_client_heartbeat():
         "role": str(data.get("role", "friend"))[:24], "tier": int(data.get("tier", 0) or 0),
         "friends": int(data.get("friends", 1) or 1), "accounts_count": int(data.get("accounts_count", 0) or 0),
         "proxies_count": int(data.get("proxies_count", 0) or 0), "version": str(data.get("version", "v5.0"))[:32], "vpn_domain": str(data.get("vpn_domain", "не задана"))[:48],
-        "exit_ips": list(data.get("exit_ips", []))[:30], "last_seen_ts": time.time(),
+        "exit_ips": list(data.get("exit_ips", []))[:100], "last_seen_ts": time.time(),
         "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     _atomic_write_json(CODE_CLIENTS_FILE, cmap)
@@ -739,6 +758,9 @@ def api_xray_status():
         "error": _XRAY_SYNC_STATE["error"],
         "sub_url": d.get("sub_url", ""),
         "pool_size": int(d.get("target_size") or d.get("pool_size") or len(d.get("slots", {})) or 25),
+        "sub_total": int(d.get("sub_total", 0) or 0),
+        "tcp_total": int(d.get("tcp_total", 0) or 0),
+        "alive_total": int(d.get("alive_total", 0) or 0),
         "updated_at": d.get("updated_at", ""),
         "proxies": load_xray_proxies(),
     })
@@ -770,7 +792,7 @@ def api_xray_apply_sub():
             cmd = [sys.executable, os.path.join(BASE_DIR, "xray_sub_sync.py"), "--sub", sub_url, "--size", str(size), "--scan-all"]
             if rotate:
                 cmd.append("--rotate-all")
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=360)
             if res.returncode != 0:
                 _XRAY_SYNC_STATE["error"] = (res.stderr or res.stdout or "Ошибка обработки подписки")[-240:]
             elif os.name != "nt":
@@ -781,7 +803,7 @@ def api_xray_apply_sub():
             _XRAY_SYNC_STATE["syncing"] = False
 
     threading.Thread(target=_worker, daemon=True).start()
-    return jsonify({"ok": True, "message": "Подписка принята! Идет тест скорости серверов (10–20 сек)..."})
+    return jsonify({"ok": True, "message": "Запущена полная проверка всех конфигов подписки..."})
 
 @app.route("/api/node-stats")
 def api_node_stats():

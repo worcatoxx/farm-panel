@@ -1003,29 +1003,30 @@
                     </div>
 
                     <!-- Карточка Xray VPN подписки -->
-                    <section id="xray-sub-card" class="card-surface p-5 flex flex-col gap-4" aria-labelledby="xray-heading">
+                    <section id="xray-sub-card" class="card-surface p-4 sm:p-5 flex flex-col gap-3" aria-labelledby="xray-heading">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div class="flex items-center gap-2.5">
-                                <h2 id="xray-heading" class="text-sm font-medium text-[#ededed]">VPN-подписка и пул Xray (SOCKS5)</h2>
+                                <h2 id="xray-heading" class="text-sm font-medium text-[#ededed]">VPN-подписка и пул Xray (ТОП быстрых)</h2>
                                 <span id="xray-sub-badge" class="text-xs font-mono bg-[#232325] text-[#a1a1a6] border border-white/10 px-2 py-0.5 rounded-[6px]">Проверка...</span>
                             </div>
                         </div>
 
-                        <div class="flex flex-col sm:flex-row gap-2.5">
+                        <div class="flex flex-col sm:flex-row gap-2">
                             <input id="xray-sub-url" type="url" placeholder="Ссылка на подписку https://..." aria-label="Ссылка на VPN-подписку" class="field-input flex-1 h-9 px-3 text-xs font-mono mask-privacy">
                             <div class="flex items-center gap-2 shrink-0">
-                                <input id="xray-sub-size" type="number" min="1" max="100" value="25" aria-label="Количество портов Xray" title="Количество локальных SOCKS5 портов" class="field-input w-20 h-9 px-2.5 text-xs font-mono text-center">
-                                <button type="button" id="xray-apply-btn" onclick="applyXraySub(false)" class="btn-primary h-9 px-4 text-xs cursor-pointer">Загрузить прокси</button>
-                                <button type="button" onclick="applyXraySub(true)" class="btn-surface h-9 w-9 flex items-center justify-center cursor-pointer" title="Перетасовать IP на новые" aria-label="Перетасовать прокси">
-                                    <svg class="w-4 h-4 text-[#a1a1a6]" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/></svg>
+                                <input id="xray-sub-size" type="number" min="1" max="100" value="25" aria-label="Количество портов Xray" title="Количество локальных SOCKS5 портов" class="field-input w-16 h-9 px-2 text-xs font-mono text-center">
+                                <button type="button" id="xray-apply-btn" onclick="applyXraySub(false)" class="btn-primary h-9 px-3.5 text-xs cursor-pointer">Загрузить ТОП</button>
+                                <button type="button" onclick="applyXraySub(true)" class="btn-surface h-9 px-3 text-xs inline-flex items-center gap-1.5 cursor-pointer" title="Пересобрать все порты строго из ТОП самых быстрых серверов" aria-label="Пересобрать ТОП">
+                                    <svg class="w-3.5 h-3.5 text-[#a1a1a6]" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/></svg>
+                                    <span class="hidden sm:inline">Пересобрать</span>
                                 </button>
                             </div>
                         </div>
 
-                        <div id="xray-sub-info" class="text-xs font-mono text-[#85858b]">Укажите ссылку подписки — скрипт отберёт быстрые узлы с уникальным exit IP.</div>
+                        <div id="xray-sub-info" class="text-xs font-mono text-[#85858b]">Укажите ссылку подписки — скрипт проверит все узлы и отберёт ТОП самых быстрых с уникальным IP.</div>
 
-                        <!-- Список активных портов (заполняется из /api/xray/status) -->
-                        <div id="xray-ports-preview" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-2 border-t border-white/[0.08]"></div>
+                        <!-- Компактный ТОП активных портов (заполняется из /api/xray/status) -->
+                        <div id="xray-ports-preview" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 pt-2.5 border-t border-white/[0.08]"></div>
                     </section>
 
                     {% if not is_standard|default(false) %}
@@ -2877,18 +2878,38 @@
                     if (info) info.textContent = d.error;
                     preview?.classList.add('hidden');
                 } else if (d.proxies && d.proxies.length) {
-                    if (badge) { badge.textContent = `${d.proxies.length} портов`; badge.className = 'text-xs font-mono bg-[#4cc38a]/10 text-[#4cc38a] border border-[#4cc38a]/25 px-2 py-0.5 rounded-[6px]'; }
+                    if (badge) { badge.textContent = `ТОП ${d.proxies.length}`; badge.className = 'text-xs font-mono bg-[#4cc38a]/10 text-[#4cc38a] border border-[#4cc38a]/25 px-2 py-0.5 rounded-[6px]'; }
                     if (navCnt) navCnt.textContent = String(d.proxies.length);
-                    if (info) info.textContent = `Активно ${d.proxies.length} SOCKS5 · обновлено ${d.updated_at || '—'} · Watchdog 15 с`;
+                    const pings = d.proxies.map(p => Number(p.ping_ms)).filter(v => Number.isFinite(v) && v > 0);
+                    const rangeStr = pings.length ? ` · ${Math.round(Math.min(...pings))}–${Math.round(Math.max(...pings))} ms` : '';
+                    const scanStr = d.sub_total > 0 ? `из ${d.sub_total} конфигов (живых ${d.alive_total || d.proxies.length})` : 'SOCKS5';
+                    if (info) info.textContent = `ТОП-${d.proxies.length} ${scanStr}${rangeStr} · ${d.updated_at || '—'} · Watchdog 15 с`;
                     if (preview) {
-                        const cards = d.proxies.map(pr => {
-                            const item = _makeEl('div', 'card-sub px-3 py-2 flex items-center justify-between gap-2 text-xs font-mono');
-                            item.appendChild(_makeEl('span', 'text-[#ededed] truncate', pr.label));
-                            const cBtn = _makeEl('button', 'text-[#85858b] hover:text-[#60a5fa] shrink-0 cursor-pointer', 'Коп.');
-                            cBtn.type = 'button';
-                            cBtn.onclick = () => copyTextValue(pr.bind, 'SOCKS5');
-                            item.appendChild(cBtn);
-                            return item;
+                        const cards = d.proxies.map((pr, idx) => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.title = `${pr.label} — нажмите, чтобы скопировать ${pr.bind}`;
+                            btn.className = 'card-sub px-2.5 py-1.5 flex items-center justify-between gap-2 text-[11px] font-mono text-left hover:border-white/20 transition-colors cursor-pointer w-full min-w-0';
+                            btn.onclick = () => copyTextValue(pr.bind, `SOCKS5 :${pr.port || ''}`);
+
+                            const left = _makeEl('div', 'flex items-center gap-1.5 min-w-0 flex-1');
+                            left.appendChild(_makeEl('span', 'text-[#85858b] shrink-0 w-5', `#${idx + 1}`));
+                            left.appendChild(_makeEl('span', 'text-[#60a5fa] shrink-0', `:${pr.port || '?'}`));
+                            left.appendChild(_makeEl('span', 'text-[#ededed] truncate', pr.name || 'VPN'));
+                            left.appendChild(_makeEl('span', 'text-[#85858b] truncate hidden sm:inline mask-privacy', pr.public || ''));
+
+                            const msNum = pr.ping_ms !== null && pr.ping_ms !== undefined ? Number(pr.ping_ms) : null;
+                            const msText = msNum !== null && Number.isFinite(msNum) ? `${Math.round(msNum)}ms` : '—';
+                            let msCls = 'text-[#85858b] bg-white/5 border-white/10';
+                            if (msNum !== null && Number.isFinite(msNum)) {
+                                if (msNum <= 120) msCls = 'text-[#4cc38a] bg-[#4cc38a]/10 border-[#4cc38a]/25';
+                                else if (msNum <= 250) msCls = 'text-[#e5a93c] bg-[#e5a93c]/10 border-[#e5a93c]/25';
+                                else msCls = 'text-[#e5484d] bg-[#e5484d]/10 border-[#e5484d]/25';
+                            }
+                            const msBadge = _makeEl('span', `shrink-0 px-1.5 py-0.5 rounded-[4px] border text-[10px] leading-none ${msCls}`, msText);
+
+                            btn.append(left, msBadge);
+                            return btn;
                         });
                         preview.replaceChildren(...cards);
                         preview.classList.remove('hidden');
