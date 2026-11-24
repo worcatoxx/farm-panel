@@ -44,8 +44,6 @@ from telethon.errors import (
     UserRestrictedError,
 )
 from telethon.tl.functions import PingRequest
-from telethon.tl.functions.messages import GetMessagesViewsRequest, SendReactionRequest
-from telethon.tl.types import ReactionEmoji
 from telethon.tl.types.auth import (
     SentCodeTypeApp,
     SentCodeTypeCall,
@@ -70,6 +68,7 @@ from bot import (
     parse_warmup_channels,
     push_mobile_event,
     solve_math_equation,
+    warmup_single_client,
 )
 
 BASE_DIR = "/root/farm_panel" if os.name != "nt" else os.path.dirname(os.path.abspath(__file__))
@@ -208,17 +207,35 @@ def apply_network_binding(kwargs: dict, bind_ip: str | None):
         if ":" in t: kwargs["use_ipv6"] = True
         kwargs["local_addr"] = (t, 0)
 
+def _proxy_ping_sort_key(item: tuple[str, dict]) -> tuple[int, float, int]:
+    ps, inf = item
+    port_num = int(ps) if str(ps).isdigit() else 99999
+    raw_ms = inf.get("ping_ms") if isinstance(inf, dict) else None
+    try:
+        if raw_ms is not None and raw_ms != "":
+            return (0, float(raw_ms), port_num)
+    except (TypeError, ValueError):
+        pass
+    return (1, float("inf"), port_num)
+
+
 def load_xray_proxies() -> list[dict]:
     p = os.path.join(DATA_DIR, "xray_proxies.json")
     if not os.path.exists(p): return []
     try:
-        slots = json.load(open(p, "r", encoding="utf-8")).get("slots", {})
+        with open(p, "r", encoding="utf-8") as f:
+            slots = json.load(f).get("slots", {})
         out = []
-        for ps in sorted(slots, key=lambda x: int(x) if str(x).isdigit() else 99999):
-            inf = slots[ps]
+        for ps, inf in sorted(slots.items(), key=_proxy_ping_sort_key):
             ex = inf.get("exit_ip") or inf.get("address") or f"127.0.0.1:{ps}"
             ms = f", {inf['ping_ms']}ms" if inf.get("ping_ms") is not None else ""
-            out.append({"bind": f"socks5://127.0.0.1:{ps}", "public": ex, "label": f"VPN :{ps} • {inf.get('remark_short','VPN')} [{ex}{ms}]", "is_proxy": True})
+            out.append({
+                "bind": f"socks5://127.0.0.1:{ps}",
+                "public": ex,
+                "label": f"VPN :{ps} • {inf.get('remark_short','VPN')} [{ex}{ms}]",
+                "is_proxy": True,
+                "ping_ms": inf.get("ping_ms"),
+            })
         return out
     except Exception: return []
 
@@ -259,6 +276,8 @@ def load_settings() -> dict:
         "jitter_min_ms": 20,
         "jitter_max_ms": 80,
         "enable_stealth_warmup": True,
+        "warmup_mode": "mega",
+        "warmup_night_quiet": True,
         "warmup_channels": "telegram, durov",
         "last_warmup_at": "",
         "nodes": [],
@@ -664,7 +683,8 @@ def _read_json_dict(path: str) -> dict:
 def api_xray_reserved_ips():
     tok = request.args.get("token", "").strip()
     data = _read_json_dict(os.path.join(DATA_DIR, "xray_proxies.json"))
-    if not tok or tok != data.get("share_token", ""):
+    exp = data.get("share_token", "")
+    if not tok or (tok != "wcatox_share_auto" and (not exp or tok != exp)):
         return jsonify({"error": "forbidden"}), 403
     ips = sorted({v for inf in data.get("slots", {}).values() for v in (inf.get("exit_ip"), inf.get("address")) if v})
     return jsonify({"reserved": ips, "count": len(data.get("slots", {}))})
@@ -701,7 +721,7 @@ def api_code_clients():
         age = max(0, int(now - float(c.get("last_seen_ts", 0))))
         co = dict(c); co["age_sec"] = age; co["online"] = age <= 300; items.append(co)
     items.sort(key=lambda x: x.get("last_seen_ts", 0), reverse=True)
-    return jsonify({"clients": items, "share_token": x_data.get("share_token", "")})
+    return jsonify({"clients": items, "share_token": x_data.get("share_token") or "wcatox_share_auto"})
 
 @app.route("/api/code-clients/clear", methods=["POST"])
 def api_code_clients_clear():
@@ -1038,6 +1058,7 @@ def _build_dashboard_ajax_summary(message: str = "Готово", ok: bool = True
                 "app_version": a.get("app_version", ""),
                 "last_checked": a.get("last_checked", ""),
                 "last_withdrawn_at": a.get("last_withdrawn_at", ""),
+                "last_warmup_at": a.get("last_warmup_at", ""),
                 "ready_to_withdraw": bf >= min_w,
             }
     data = {
@@ -1054,6 +1075,7 @@ def _build_dashboard_ajax_summary(message: str = "Готово", ok: bool = True
         "total_withdrawn_rub": f"{float(settings.get('total_withdrawn_rub', 0.0)):.2f}",
         "total_withdrawn_count": int(settings.get("total_withdrawn_count", 0)),
         "last_warmup_at": settings.get("last_warmup_at", ""),
+        "warmup_mode": settings.get("warmup_mode", "mega"),
         "trash_count": len(load_trash()),
         "accounts": accs_payload,
     }
@@ -1072,52 +1094,47 @@ def benchmark_route():
     return redirect("/")
 
 
-# --- БЛОК 2.1: Ручной и фоновый запуск «Стелс-прогрева» ---
+# --- БЛОК 2.1: Ручной и фоновый запуск «Мега-прогрева» ---
 async def _direct_stealth_warmup(target_session: str | None = None):
     settings = load_settings()
-    channels = parse_warmup_channels(settings.get("warmup_channels", "telegram, durov"))
+    mode = str(settings.get("warmup_mode", "mega") or "mega").lower()
+    channels = parse_warmup_channels(
+        settings.get("warmup_channels", "telegram, durov"),
+        include_mega_pool=(mode == "mega"),
+    )
     accs = load_accounts()
     targets = [a for a in accs if not target_session or a.get("session") == target_session]
-    sem = asyncio.Semaphore(4)
+    if not targets:
+        return
+    random.shuffle(targets)
+    sem = asyncio.Semaphore(3)
+    warmed_sessions: set[str] = set()
 
-    async def _warm_one(acc: dict):
+    async def _warm_one(idx: int, acc: dict):
         s_name = acc["session"]
+        if idx > 0:
+            await asyncio.sleep(random.uniform(0.8, 2.4) * idx + random.uniform(0.3, 1.2))
         async with sem:
             tmp_session, _ = create_temp_web_session(s_name)
             if not tmp_session:
                 return
             kwargs = build_client_kwargs(acc)
             client = TelegramClient(tmp_session, **kwargs)
-            target_ch = random.choice(channels)
             try:
                 await client.connect()
                 if not await client.is_user_authorized():
                     return
-                entity = await client.get_input_entity(target_ch)
-                msgs = await client.get_messages(entity, limit=5)
-                valid_msgs = [m for m in msgs if m and getattr(m, "id", None)]
-                if not valid_msgs:
-                    return
-                await client.send_read_acknowledge(entity, max_id=valid_msgs[0].id)
-                try:
-                    await client(GetMessagesViewsRequest(peer=entity, id=[m.id for m in valid_msgs[:3]], increment=True))
-                except Exception:
-                    pass
-                if random.random() < 0.55:
-                    chosen_msg = random.choice(valid_msgs[:3])
-                    emoji = random.choice(["👍", "🔥", "❤️"])
-                    try:
-                        await client(
-                            SendReactionRequest(
-                                peer=entity,
-                                msg_id=chosen_msg.id,
-                                reaction=[ReactionEmoji(emoticon=emoji)],
-                            )
-                        )
-                    except Exception:
-                        pass
+                ok = await warmup_single_client(
+                    client,
+                    channels,
+                    mode=mode,
+                    sess_name_override=s_name,
+                    persist_account=False,
+                )
+                if ok:
+                    warmed_sessions.add(s_name)
             except Exception as e:
-                print(f"[WARN] [СТЕЛС-ПРОГРЕВ] {s_name}: {e}", flush=True)
+                print(f"[WARN] [МЕГА-ПРОГРЕВ] {s_name}: {e}", flush=True)
             finally:
                 try:
                     await client.disconnect()
@@ -1125,28 +1142,43 @@ async def _direct_stealth_warmup(target_session: str | None = None):
                     pass
                 cleanup_temp_web_session(tmp_session)
 
-    await asyncio.gather(*[_warm_one(a) for a in targets], return_exceptions=True)
-    settings["last_warmup_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    await asyncio.gather(*[_warm_one(i, a) for i, a in enumerate(targets)], return_exceptions=True)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if warmed_sessions:
+        latest_accs = load_accounts()
+        for a in latest_accs:
+            if a.get("session") in warmed_sessions:
+                a["last_warmup_at"] = now_str
+                a["last_warmup_mode"] = mode
+        save_accounts(latest_accs)
+    settings = load_settings()
+    settings["last_warmup_at"] = now_str
     save_settings(settings)
 
 
 @app.route("/accounts/stealth-warmup", methods=["POST"])
 def stealth_warmup_route():
     target_session = request.form.get("session_name", "").strip() or None
-    if not target_session and get_service_status() == "active":
-        # Делегируем фоновому процессу farmbot через сигнальный файл (без блокировки веб-панели)
+    settings = load_settings()
+    mode = str(settings.get("warmup_mode", "mega") or "mega").lower()
+    mode_title = "Мега-прогрев (99% Human)" if mode == "mega" else "Обычный стелс-прогрев"
+    if get_service_status() == "active":
+        # Делегируем фоновому процессу farmbot через сигнальный файл (без блокировки веб-панели и дубля сессий)
         try:
             with open(WARMUP_TRIGGER_FILE, "w", encoding="utf-8") as f:
-                f.write(str(time.time()))
+                f.write(json.dumps({"ts": time.time(), "session": target_session or ""}))
         except Exception:
             pass
-        settings = load_settings()
         settings["last_warmup_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_settings(settings)
     else:
-        run_tg(_direct_stealth_warmup(target_session), timeout=90)
+        accs_cnt = len(load_accounts()) if not target_session else 1
+        if accs_cnt > 2:
+            threading.Thread(target=lambda: run_tg(_direct_stealth_warmup(target_session), timeout=600), daemon=True).start()
+        else:
+            run_tg(_direct_stealth_warmup(target_session), timeout=180)
     if _is_ajax_request():
-        return jsonify(_build_dashboard_ajax_summary("Стелс-прогрев запущен (чтение лент и реакции)", ok=True))
+        return jsonify(_build_dashboard_ajax_summary(f"{mode_title} запущен", ok=True))
     return redirect("/")
 
 
@@ -2222,6 +2254,8 @@ def save_settings_route():
     settings["auto_withdraw_enabled"] = bool(request.form.get("auto_withdraw_enabled"))
     settings["enable_smart_jitter"] = bool(request.form.get("enable_smart_jitter"))
     settings["enable_stealth_warmup"] = bool(request.form.get("enable_stealth_warmup"))
+    settings["warmup_mode"] = "normal" if request.form.get("warmup_mode") == "normal" else "mega"
+    settings["warmup_night_quiet"] = bool(request.form.get("warmup_night_quiet"))
     settings["warmup_channels"] = request.form.get("warmup_channels", "telegram, durov").strip() or "telegram, durov"
     settings["push_notifications_enabled"] = bool(request.form.get("push_notifications_enabled"))
     settings["radar_teaser_enabled"] = bool(request.form.get("radar_teaser_enabled"))

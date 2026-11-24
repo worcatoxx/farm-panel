@@ -832,7 +832,7 @@
                                 <button type="submit" class="btn-surface h-8 px-3 text-xs inline-flex items-center gap-1.5 cursor-pointer">Пинг DC</button>
                             </form>
                             <form action="/accounts/stealth-warmup" method="post" class="m-0 ajax-form" data-loading-text="Прогрев...">
-                                <button type="submit" class="btn-surface h-8 px-3 text-xs inline-flex items-center gap-1.5 cursor-pointer">Стелс-прогрев</button>
+                                <button type="submit" class="btn-surface h-8 px-3 text-xs inline-flex items-center gap-1.5 cursor-pointer">{% if settings.warmup_mode|default('mega') == 'mega' %}Мега-прогрев{% else %}Стелс-прогрев{% endif %}</button>
                             </form>
                             <form action="/accounts/randomize-devices" method="post" class="m-0 ajax-form" data-loading-text="Смена...">
                                 <button type="submit" class="btn-surface h-8 px-3 text-xs inline-flex items-center gap-1.5 cursor-pointer">Сменить устройства ({{ device_profiles_count|default(24) }})</button>
@@ -949,7 +949,10 @@
                                                         </span>
                                                         <span id="ready-badge-{{ acc.session }}" class="{% if (acc.balance_float or 0) >= min_withdraw %}inline-block{% else %}hidden{% endif %} text-[11px] font-sans bg-[#4cc38a]/10 text-[#4cc38a] border border-[#4cc38a]/25 px-1.5 py-0.5 rounded-[5px]">Готов</span>
                                                     </div>
-                                                    <div id="checked-{{ acc.session }}" class="text-[11px] text-[#85858b]">{% if acc.last_checked %}обн. {{ acc.last_checked }}{% endif %}</div>
+                                                    <div id="checked-{{ acc.session }}" class="text-[11px] text-[#85858b]">
+                                                        {% if acc.last_checked %}обн. {{ acc.last_checked }}{% endif %}
+                                                        {% if acc.last_warmup_at|default('') %}{% if acc.last_checked %} · {% endif %}прогрев {{ acc.last_warmup_at[-8:] }}{% endif %}
+                                                    </div>
                                                 </td>
                                                 <td class="py-2.5 px-4 text-right whitespace-nowrap">
                                                     <div class="inline-flex items-center gap-1.5">
@@ -1476,10 +1479,26 @@
                                 <div class="card-sub p-4 flex flex-col gap-3">
                                     <div class="flex items-center justify-between gap-4">
                                         <div>
-                                            <div class="text-[13px] font-medium text-[#ededed]">Фоновый стелс-прогрев аккаунтов</div>
-                                            <div class="text-xs text-[#85858b] mt-0.5">Чтение постов и редкие реакции в публичных каналах каждые 4–6 часов</div>
+                                            <div class="text-[13px] font-medium text-[#ededed]">Фоновый прогрев аккаунтов (Anti-Ban)</div>
+                                            <div class="text-xs text-[#85858b] mt-0.5">Индивидуальные окна 2.5–5.5ч для каждого аккаунта без одновременного залпа</div>
                                         </div>
-                                        <input type="checkbox" name="enable_stealth_warmup" value="1" {% if settings.enable_stealth_warmup %}checked{% endif %} aria-label="Стелс-прогрев">
+                                        <input type="checkbox" name="enable_stealth_warmup" value="1" {% if settings.enable_stealth_warmup %}checked{% endif %} aria-label="Фоновый прогрев">
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
+                                        <div>
+                                            <label for="set-warmup-mode" class="text-xs text-[#85858b] block mb-1">Режим имитации человека</label>
+                                            <select id="set-warmup-mode" name="warmup_mode" class="field-input w-full h-8 px-2.5 text-xs">
+                                                <option value="mega" {% if settings.warmup_mode|default('mega') == 'mega' %}selected{% endif %}>Мега-прогрев (99% Human Behavior)</option>
+                                                <option value="normal" {% if settings.warmup_mode|default('mega') == 'normal' %}selected{% endif %}>Обычный стелс-прогрев</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex items-end justify-between gap-3 pb-1">
+                                            <div>
+                                                <div class="text-xs text-[#ededed]">Ночной покой (01:00–07:00)</div>
+                                                <div class="text-[11px] text-[#85858b]">Снижение частоты авто-прогрева ночью</div>
+                                            </div>
+                                            <input type="checkbox" name="warmup_night_quiet" value="1" {% if settings.warmup_night_quiet is not defined or settings.warmup_night_quiet %}checked{% endif %} aria-label="Ночное снижение активности">
+                                        </div>
                                     </div>
                                     <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-2 border-t border-white/[0.06]">
                                         <div class="flex-1">
@@ -2051,8 +2070,11 @@
                         badgeEl.classList.toggle('inline-block', isReady);
                     }
                     const chkEl = document.getElementById(`checked-${s}`);
-                    if (chkEl && acc.last_checked) {
-                        chkEl.textContent = `обн. ${acc.last_checked}`;
+                    if (chkEl && (acc.last_checked || acc.last_warmup_at)) {
+                        const parts = [];
+                        if (acc.last_checked) parts.push(`обн. ${acc.last_checked}`);
+                        if (acc.last_warmup_at) parts.push(`прогрев ${String(acc.last_warmup_at).slice(-8)}`);
+                        chkEl.textContent = parts.join(' · ');
                     }
                     const devEl = document.getElementById(`dev-${s}`);
                     if (devEl && acc.device_model) {

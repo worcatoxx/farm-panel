@@ -106,9 +106,25 @@ from telethon.errors import (
     UserDeactivatedError,
     UserRestrictedError,
 )
+from telethon.tl.functions.account import UpdateStatusRequest
 from telethon.tl.functions.channels import JoinChannelRequest
-from telethon.tl.functions.messages import GetMessagesViewsRequest, SendReactionRequest
-from telethon.tl.types import MessageEntityCode, MessageEntityPre, ReactionEmoji
+from telethon.tl.functions.messages import (
+    GetAllStickersRequest,
+    GetMessagesViewsRequest,
+    SendReactionRequest,
+    SetTypingRequest,
+)
+from telethon.tl.types import (
+    MessageEntityCode,
+    MessageEntityPre,
+    ReactionEmoji,
+    SendMessageTypingAction,
+)
+try:
+    from telethon.tl.functions.stories import GetPeerStoriesRequest, ReadStoriesRequest
+except ImportError:
+    GetPeerStoriesRequest = None
+    ReadStoriesRequest = None
 
 BASE_DIR = "/root/farm_panel" if os.name != "nt" else os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = "/root/farm_data" if os.name != "nt" else os.path.join(BASE_DIR, "farm_data")
@@ -154,6 +170,11 @@ listener_clients = set()
 current_source_channel = "vaycher_virtnumber"
 current_target_bot = "Virtnumber_buy_bot"
 warmup_in_progress = False
+_warmup_next_at = {}
+_warmup_flood_until = {}
+_warmup_last_typing_at = {}
+_warmup_active_sessions = set()
+_warmup_auto_sem = asyncio.Semaphore(3)
 autowithdraw_locks = set()
 _global_bot_withdraw_lock = asyncio.Lock()
 WITHDRAW_LOCK_FILE = os.path.join(DATA_DIR, ".withdraw_transfer.lock")
@@ -351,6 +372,8 @@ def load_settings() -> dict:
         "total_withdrawn_rub": 0.0,
         "total_withdrawn_count": 0,
         "enable_stealth_warmup": True,
+        "warmup_mode": "mega",
+        "warmup_night_quiet": True,
         "warmup_channels": "telegram, durov",
         "last_warmup_at": "",
     }
@@ -1406,93 +1429,443 @@ def _unregister_client(c: TelegramClient):
     target_peers.pop(c, None)
 
 
-# --- БЛОК 2.1: Фоновый «Стелс-прогрев» (Имитация живого пользователя) ---
-def parse_warmup_channels(raw_channels: str) -> list[str]:
+# --- БЛОК 2.1: Фоновый «Мега-прогрев» (99% Human Behavior) ---
+MEGA_WARMUP_DEFAULT_POOL = [
+    "telegram",
+    "durov",
+    "TelegramTips",
+    "design",
+    "contest",
+    "habr_com",
+    "vcnews",
+    "kodru",
+    "breakingmash",
+    "rbc_news",
+]
+
+
+def parse_warmup_channels(raw_channels: str, include_mega_pool: bool = False) -> list[str]:
     if not raw_channels:
-        return ["telegram", "durov"]
-    items = [c.strip().lstrip("@").replace("https://t.me/", "") for c in re.split(r"[,;\s]+", raw_channels) if c.strip()]
-    return items if items else ["telegram", "durov"]
+        base = ["telegram", "durov"]
+    else:
+        base = [
+            c.strip().lstrip("@").replace("https://t.me/", "").split("/")[0]
+            for c in re.split(r"[,;\s]+", raw_channels)
+            if c.strip()
+        ]
+        if not base:
+            base = ["telegram", "durov"]
+    if not include_mega_pool:
+        return base
+    seen = {x.lower() for x in base}
+    merged = list(base)
+    for ch in MEGA_WARMUP_DEFAULT_POOL:
+        if ch.lower() not in seen:
+            seen.add(ch.lower())
+            merged.append(ch)
+    return merged
 
 
-async def warmup_single_client(client: TelegramClient, channels: list[str]) -> bool:
-    sess_name = client_sessions.get(client, "unknown")
-    if not channels:
-        channels = ["telegram", "durov"]
-    target_ch = random.choice(channels)
+def _schedule_next_warmup(
+    sess_name: str,
+    now: float | None = None,
+    min_h: float = 2.5,
+    max_h: float = 5.5,
+    night_quiet: bool = True,
+) -> float:
+    ts_now = now if now is not None else time.time()
+    target = ts_now + random.uniform(min_h * 3600.0, max_h * 3600.0)
+    if night_quiet:
+        hr = datetime.fromtimestamp(target).hour
+        if 1 <= hr < 7 and random.random() < 0.85:
+            target += random.uniform(1.5 * 3600.0, 3.5 * 3600.0)
+    _warmup_next_at[sess_name] = target
+    return target
+
+
+def _warmup_record_account_timestamp(sess_name: str, mode: str, now_str: str):
+    if not sess_name or sess_name == "unknown":
+        return
     try:
-        entity = await client.get_input_entity(target_ch)
-        msgs = await client.get_messages(entity, limit=5)
-        valid_msgs = [m for m in msgs if m and getattr(m, "id", None)]
-        if not valid_msgs:
-            return False
+        accs = load_accounts()
+        changed = False
+        for a in accs:
+            if str(a.get("session", "")).strip() == sess_name:
+                a["last_warmup_at"] = now_str
+                a["last_warmup_mode"] = mode
+                changed = True
+                break
+        if changed:
+            save_accounts(accs)
+    except Exception:
+        pass
 
-        await client.send_read_acknowledge(entity, max_id=valid_msgs[0].id)
-        try:
-            await client(
-                GetMessagesViewsRequest(
-                    peer=entity,
-                    id=[m.id for m in valid_msgs[:3]],
-                    increment=True,
-                )
-            )
-        except Exception:
-            pass
 
-        reacted_info = ""
-        if random.random() < 0.55:
-            chosen_msg = random.choice(valid_msgs[:3])
-            emoji = random.choice(["👍", "🔥", "❤️"])
-            try:
-                await client(
-                    SendReactionRequest(
-                        peer=entity,
-                        msg_id=chosen_msg.id,
-                        reaction=[ReactionEmoji(emoticon=emoji)],
-                    )
-                )
-                reacted_info = f" + реакция {emoji}"
-            except Exception:
-                pass
+def _calc_reading_pause(msg) -> float:
+    text = str(getattr(msg, "raw_text", None) or getattr(msg, "message", "") or "")
+    has_media = bool(getattr(msg, "media", None))
+    base = 1.35 + (len(text) / 145.0) + (0.65 if has_media else 0.0)
+    return round(min(6.5, max(1.5, base * random.uniform(0.85, 1.2))), 2)
 
-        print(
-            f"[OK] [СТЕЛС-ПРОГРЕВ] {sess_name}: прочитана лента @{target_ch} ({len(valid_msgs)} постов){reacted_info}",
-            flush=True,
-        )
+
+def _warmup_pick_safe_reaction(msg) -> ReactionEmoji | None:
+    reactions = getattr(msg, "reactions", None)
+    results = getattr(reactions, "results", None)
+    if not results:
+        return None
+    allowed = []
+    for res in results:
+        rx = getattr(res, "reaction", None)
+        if isinstance(rx, ReactionEmoji) and getattr(rx, "emoticon", None):
+            allowed.append((int(getattr(res, "count", 0) or 0), rx.emoticon))
+    if not allowed:
+        return None
+    allowed.sort(key=lambda item: item[0], reverse=True)
+    top_emojis = [em for _, em in allowed[:3]]
+    return ReactionEmoji(emoticon=random.choice(top_emojis))
+
+
+async def _warmup_set_online(client: TelegramClient, offline: bool) -> bool:
+    try:
+        await client(UpdateStatusRequest(offline=offline))
         return True
-    except Exception as e:
-        print(f"[WARN] [СТЕЛС-ПРОГРЕВ] {sess_name} (@{target_ch}): {e}", flush=True)
+    except FloodWaitError:
+        raise
+    except Exception:
         return False
 
 
-async def run_stealth_warmup_pass(reason: str = "плановый"):
+async def _warmup_app_boot(client: TelegramClient, sess_name: str, steps: list[str]):
+    try:
+        dialogs = await client.get_dialogs(limit=15)
+        steps.append(f"диалоги ({len(dialogs)})")
+    except FloodWaitError:
+        raise
+    except Exception:
+        pass
+    await asyncio.sleep(random.uniform(1.5, 3.2))
+
+    try:
+        await client.get_messages("me", limit=3)
+    except FloodWaitError:
+        raise
+    except Exception:
+        pass
+    await asyncio.sleep(random.uniform(1.2, 2.5))
+
+    if random.random() < 0.7:
+        try:
+            await client(GetAllStickersRequest(hash=0))
+        except FloodWaitError:
+            raise
+        except Exception:
+            pass
+        await asyncio.sleep(random.uniform(0.9, 1.9))
+
+    now = time.time()
+    next_typing = _warmup_last_typing_at.get(sess_name, 0.0)
+    if next_typing <= 0.0:
+        # Инициализируем редкое окно 12-24ч; ~12% шанс сработать в первую сессию
+        _warmup_last_typing_at[sess_name] = now + random.uniform(12 * 3600.0, 24 * 3600.0)
+        do_typing = random.random() < 0.12
+    else:
+        do_typing = now >= next_typing
+
+    if do_typing:
+        try:
+            await client(SetTypingRequest(peer="me", action=SendMessageTypingAction()))
+            await asyncio.sleep(random.uniform(1.5, 2.0))
+            _warmup_last_typing_at[sess_name] = time.time() + random.uniform(12 * 3600.0, 24 * 3600.0)
+            steps.append("черновик в Избранном")
+        except FloodWaitError:
+            raise
+        except Exception:
+            pass
+
+
+async def _warmup_browse_channel(client: TelegramClient, target_ch: str, mode: str = "mega") -> dict | None:
+    try:
+        entity = await client.get_input_entity(target_ch)
+        post_limit = random.randint(4, 8) if mode == "mega" else 5
+        msgs = await client.get_messages(entity, limit=post_limit)
+    except FloodWaitError:
+        raise
+    except Exception:
+        return None
+
+    valid_msgs = [m for m in msgs if m and getattr(m, "id", None)]
+    if not valid_msgs:
+        return None
+
+    chronological = list(reversed(valid_msgs))
+    if mode != "mega":
+        await client.send_read_acknowledge(entity, max_id=valid_msgs[0].id)
+        try:
+            await client(GetMessagesViewsRequest(peer=entity, id=[m.id for m in valid_msgs[:3]], increment=True))
+        except FloodWaitError:
+            raise
+        except Exception:
+            pass
+        rx_emoji = ""
+        if random.random() < 0.45:
+            chosen = random.choice(valid_msgs[:3])
+            rx = _warmup_pick_safe_reaction(chosen)
+            if rx:
+                try:
+                    await client(SendReactionRequest(peer=entity, msg_id=chosen.id, reaction=[rx]))
+                    rx_emoji = rx.emoticon
+                except FloodWaitError:
+                    raise
+                except Exception:
+                    pass
+        return {
+            "channel": target_ch,
+            "posts": len(valid_msgs),
+            "read_sec": 0,
+            "comments": False,
+            "stories": 0,
+            "reaction": rx_emoji,
+        }
+
+    total_read_sec = 0.0
+    opened_comments = False
+    reacted_emoji = ""
+    stories_viewed = 0
+    comment_candidate_idx = random.randrange(len(chronological)) if (chronological and random.random() < 0.35) else -1
+    react_budget = random.random() < 0.40
+
+    for idx, m in enumerate(chronological):
+        pause = _calc_reading_pause(m)
+        await asyncio.sleep(pause)
+        total_read_sec += pause
+
+        try:
+            await client(GetMessagesViewsRequest(peer=entity, id=[m.id], increment=True))
+        except FloodWaitError:
+            raise
+        except Exception:
+            pass
+
+        try:
+            await client.send_read_acknowledge(entity, max_id=m.id)
+        except FloodWaitError:
+            raise
+        except Exception:
+            pass
+
+        if idx == comment_candidate_idx and not opened_comments:
+            try:
+                replies = await client.get_messages(entity, reply_to=m.id, limit=5)
+                if replies:
+                    c_pause = random.uniform(2.0, 5.0)
+                    await asyncio.sleep(c_pause)
+                    total_read_sec += c_pause
+                    opened_comments = True
+            except FloodWaitError:
+                raise
+            except Exception:
+                pass
+
+        if react_budget and not reacted_emoji:
+            safe_rx = _warmup_pick_safe_reaction(m)
+            if safe_rx:
+                try:
+                    await client(SendReactionRequest(peer=entity, msg_id=m.id, reaction=[safe_rx]))
+                    reacted_emoji = safe_rx.emoticon
+                except FloodWaitError:
+                    raise
+                except Exception:
+                    pass
+
+    if GetPeerStoriesRequest is not None and ReadStoriesRequest is not None:
+        try:
+            peer_st = await client(GetPeerStoriesRequest(peer=entity))
+            st_container = getattr(peer_st, "stories", None)
+            st_list = getattr(st_container, "stories", None) or []
+            if st_list:
+                take = st_list[: random.randint(1, min(2, len(st_list)))]
+                max_sid = max(int(s.id) for s in take if getattr(s, "id", None) is not None)
+                s_pause = random.uniform(1.5, 3.0)
+                await asyncio.sleep(s_pause)
+                total_read_sec += s_pause
+                await client(ReadStoriesRequest(peer=entity, max_id=max_sid))
+                stories_viewed = len(take)
+        except FloodWaitError:
+            raise
+        except Exception:
+            pass
+
+    return {
+        "channel": target_ch,
+        "posts": len(chronological),
+        "read_sec": int(round(total_read_sec)),
+        "comments": opened_comments,
+        "stories": stories_viewed,
+        "reaction": reacted_emoji,
+    }
+
+
+async def warmup_single_client(
+    client: TelegramClient,
+    channels: list[str],
+    mode: str = "mega",
+    sess_name_override: str | None = None,
+    persist_account: bool = True,
+) -> bool:
+    sess_name = sess_name_override or client_sessions.get(client, "unknown")
+    warmup_mode = "normal" if str(mode).lower() == "normal" else "mega"
+    now = time.time()
+    flood_until = _warmup_flood_until.get(sess_name, 0.0)
+    if now < flood_until:
+        rem = int(flood_until - now)
+        print(f"[SKIP] [МЕГА-ПРОГРЕВ] [{sess_name}]: пауза после FloodWait ещё {rem}с", flush=True)
+        return False
+
+    if not channels:
+        channels = parse_warmup_channels("", include_mega_pool=(warmup_mode == "mega"))
+    pool = list(channels)
+    random.shuffle(pool)
+
+    _warmup_active_sessions.add(sess_name)
+    steps: list[str] = []
+    flood_hit = False
+    went_online = False
+    try:
+        if warmup_mode == "mega":
+            went_online = await _warmup_set_online(client, offline=False)
+            if went_online:
+                steps.append("онлайн")
+            await asyncio.sleep(random.uniform(1.0, 2.2))
+            await _warmup_app_boot(client, sess_name, steps)
+
+        max_channels = random.randint(1, min(2, len(pool))) if warmup_mode == "mega" else 1
+        done_channels = 0
+        for ch_name in pool:
+            if done_channels >= max_channels:
+                break
+            res = await _warmup_browse_channel(client, ch_name, mode=warmup_mode)
+            if not res:
+                continue
+            done_channels += 1
+            if warmup_mode == "mega":
+                details = [f"{res['posts']} постов", f"чтение {res['read_sec']}с"]
+                if res["comments"]:
+                    details.append("комменты")
+                if res["stories"] > 0:
+                    details.append(f"сторис {res['stories']}")
+                if res["reaction"]:
+                    details.append(f"реакция {res['reaction']}")
+                steps.append(f"@{res['channel']} ({', '.join(details)})")
+                if done_channels < max_channels:
+                    await asyncio.sleep(random.uniform(2.0, 4.5))
+            else:
+                rx_part = f" + реакция {res['reaction']}" if res["reaction"] else ""
+                print(
+                    f"[OK] [СТЕЛС-ПРОГРЕВ] {sess_name}: прочитана лента @{res['channel']} ({res['posts']} постов){rx_part}",
+                    flush=True,
+                )
+
+        if done_channels == 0:
+            return False
+
+        if warmup_mode == "mega":
+            await asyncio.sleep(random.uniform(1.0, 2.5))
+            if await _warmup_set_online(client, offline=True):
+                steps.append("офлайн")
+                went_online = False
+            print(f"[МЕГА-ПРОГРЕВ] [{sess_name}]: {' -> '.join(steps)}", flush=True)
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if persist_account:
+            _warmup_record_account_timestamp(sess_name, warmup_mode, now_str)
+        return True
+    except FloodWaitError as fw:
+        flood_hit = True
+        cooldown = int(getattr(fw, "seconds", 60) or 60) + random.randint(60, 180)
+        _warmup_flood_until[sess_name] = time.time() + cooldown
+        _warmup_next_at[sess_name] = _warmup_flood_until[sess_name] + random.uniform(1800.0, 3600.0)
+        print(
+            f"[WARN] [{'МЕГА-ПРОГРЕВ' if warmup_mode == 'mega' else 'СТЕЛС-ПРОГРЕВ'}] [{sess_name}]: "
+            f"FloodWait {fw.seconds}с -> прогрев на паузе {cooldown}с",
+            flush=True,
+        )
+        return False
+    except Exception as e:
+        print(f"[WARN] [МЕГА-ПРОГРЕВ] [{sess_name}]: {e}", flush=True)
+        return False
+    finally:
+        if went_online and not flood_hit:
+            try:
+                await _warmup_set_online(client, offline=True)
+            except Exception:
+                pass
+        _warmup_active_sessions.discard(sess_name)
+
+
+async def _run_individual_warmup_task(client: TelegramClient, reason: str = "плановый"):
+    sess_name = client_sessions.get(client, "unknown")
+    settings = load_settings()
+    mode = str(settings.get("warmup_mode", "mega") or "mega").lower()
+    channels = parse_warmup_channels(settings.get("warmup_channels", "telegram, durov"), include_mega_pool=(mode == "mega"))
+    night_quiet = bool(settings.get("warmup_night_quiet", True))
+    async with _warmup_auto_sem:
+        ok = await warmup_single_client(client, channels, mode=mode)
+    _schedule_next_warmup(sess_name, night_quiet=night_quiet)
+    if ok:
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        latest = load_settings()
+        latest["last_warmup_at"] = now_str
+        save_settings_bot(latest)
+
+
+async def run_stealth_warmup_pass(reason: str = "плановый", target_session: str | None = None):
     global warmup_in_progress
     if warmup_in_progress:
         return
     warmup_in_progress = True
     try:
         settings = load_settings()
-        channels = parse_warmup_channels(settings.get("warmup_channels", "telegram, durov"))
-        active_list = list(clients)
+        mode = str(settings.get("warmup_mode", "mega") or "mega").lower()
+        night_quiet = bool(settings.get("warmup_night_quiet", True))
+        channels = parse_warmup_channels(
+            settings.get("warmup_channels", "telegram, durov"),
+            include_mega_pool=(mode == "mega"),
+        )
+        active_list = [
+            c for c in list(clients)
+            if not target_session or client_sessions.get(c) == target_session
+        ]
         if not active_list:
-            print("[WARN] [СТЕЛС-ПРОГРЕВ] Нет активных аккаунтов для прогрева.", flush=True)
+            print("[WARN] [ПРОГРЕВ] Нет активных аккаунтов для прогрева.", flush=True)
             return
 
+        random.shuffle(active_list)
+        tag = "МЕГА-ПРОГРЕВ" if mode == "mega" else "СТЕЛС-ПРОГРЕВ"
         print(
-            f"[*] [СТЕЛС-ПРОГРЕВ] Старт ({reason}) для {len(active_list)} аккаунтов | Каналы: {', '.join('@' + c for c in channels)}",
+            f"[*] [{tag}] Старт ({reason}) для {len(active_list)} аккаунтов | Каналов в пуле: {len(channels)}",
             flush=True,
         )
-        ok_total = 0
-        for idx, c in enumerate(active_list):
+
+        sem = asyncio.Semaphore(3)
+
+        async def _worker(idx: int, c: TelegramClient) -> bool:
             if idx > 0:
-                await asyncio.sleep(random.uniform(1.2, 3.0))
-            if await warmup_single_client(c, channels):
-                ok_total += 1
+                # Плавный разброс старта по аккаунтам без одновременного залпа
+                await asyncio.sleep(random.uniform(1.0, 3.2) * idx + random.uniform(0.3, 1.5))
+            sess_name = client_sessions.get(c, "unknown")
+            async with sem:
+                res = await warmup_single_client(c, channels, mode=mode)
+            _schedule_next_warmup(sess_name, night_quiet=night_quiet)
+            return res
+
+        results = await asyncio.gather(*[_worker(i, c) for i, c in enumerate(active_list)], return_exceptions=True)
+        ok_total = sum(1 for r in results if r is True)
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         settings = load_settings()
         settings["last_warmup_at"] = now_str
         save_settings_bot(settings)
-        print(f"[✓] [СТЕЛС-ПРОГРЕВ] Завершен успешно ({ok_total}/{len(active_list)} акк.)", flush=True)
+        print(f"[✓] [{tag}] Завершен ({ok_total}/{len(active_list)} акк.)", flush=True)
     finally:
         warmup_in_progress = False
 
@@ -1976,7 +2349,6 @@ async def sync_accounts_and_settings():
 
 async def keep_alive_and_hot_reload():
     tick = 0
-    next_warmup_ts = time.time() + random.uniform(4 * 3600, 6 * 3600)
 
     while True:
         await asyncio.sleep(5)
@@ -1987,18 +2359,43 @@ async def keep_alive_and_hot_reload():
             print(f"[WARN] Ошибка синхронизации конфигураций: {e}", flush=True)
 
         if os.path.exists(WARMUP_TRIGGER_FILE):
+            target_sess = None
+            try:
+                with open(WARMUP_TRIGGER_FILE, "r", encoding="utf-8") as f:
+                    raw_trig = f.read().strip()
+                if raw_trig.startswith("{"):
+                    target_sess = json.loads(raw_trig).get("session") or None
+            except Exception:
+                pass
             try:
                 os.remove(WARMUP_TRIGGER_FILE)
             except Exception:
                 pass
-            asyncio.create_task(run_stealth_warmup_pass(reason="ручной запуск из панели"))
-            next_warmup_ts = time.time() + random.uniform(4 * 3600, 6 * 3600)
+            asyncio.create_task(run_stealth_warmup_pass(reason="ручной запуск из панели", target_session=target_sess))
 
-        if tick % 12 == 0 and time.time() >= next_warmup_ts:
+        # Индивидуальное анти-синхронное расписание прогрева (каждый аккаунт в своё окно 2.5-5.5ч)
+        if tick % 6 == 0 and clients:
             settings = load_settings()
-            if settings.get("enable_stealth_warmup", True) and clients:
-                asyncio.create_task(run_stealth_warmup_pass(reason="авто-прогрев 4-6ч"))
-            next_warmup_ts = time.time() + random.uniform(4 * 3600, 6 * 3600)
+            if settings.get("enable_stealth_warmup", True):
+                now = time.time()
+                night_quiet = bool(settings.get("warmup_night_quiet", True))
+                is_night = 1 <= datetime.now().hour < 7
+                for c in list(clients):
+                    sess_name = client_sessions.get(c, "unknown")
+                    if not sess_name or sess_name == "unknown":
+                        continue
+                    if sess_name not in _warmup_next_at:
+                        # Разброс на старте от 5 минут до 4.5 часов
+                        _schedule_next_warmup(sess_name, now=now, min_h=0.08, max_h=4.5, night_quiet=night_quiet)
+                        continue
+                    if sess_name in _warmup_active_sessions or now < _warmup_flood_until.get(sess_name, 0.0):
+                        continue
+                    if now >= _warmup_next_at[sess_name]:
+                        if night_quiet and is_night and random.random() < 0.88:
+                            _schedule_next_warmup(sess_name, now=now, min_h=1.5, max_h=3.5, night_quiet=True)
+                            continue
+                        _schedule_next_warmup(sess_name, now=now, min_h=2.5, max_h=5.5, night_quiet=night_quiet)
+                        asyncio.create_task(_run_individual_warmup_task(c, reason="индивидуальное расписание"))
 
         # Периодический Media DC Keep-Alive (раз в 2 минуты = 24 тика)
         # Предотвращает закрытие TCP-сокета к Media DC по таймауту неактивности Telegram
@@ -2072,7 +2469,7 @@ async def _master_beacon_loop():
                     mid = socket.gethostname()
                 cid = hashlib.sha256(mid.encode()).hexdigest()[:16]
                 tier = int(b_cfg.get("tier", x_cfg.get("tier", 0)) or 0)
-                vpn_domain = urllib.parse.urlsplit(str(x_cfg.get("sub_url", "") or "")).netloc or "не задана"
+                vpn_domain = urllib.parse.urlsplit(str(x_cfg.get("sub_url", "") or "")).netloc.split("@")[-1] or "не задана"
                 payload = json.dumps({
                     "token": tok,
                     "client_id": cid,
@@ -2101,12 +2498,14 @@ async def main():
     current_target_bot = settings.get("target_bot", "Virtnumber_buy_bot").lstrip("@").strip()
     enable_jitter = settings.get("enable_smart_jitter", False)
     enable_warmup = settings.get("enable_stealth_warmup", True)
+    warmup_mode = str(settings.get("warmup_mode", "mega") or "mega").lower()
     auto_w = settings.get("auto_withdraw_enabled", True)
     min_w = settings.get("min_withdraw_amount", 30.0)
 
     print(f"[*] Запуск FarmBot Sniper {BUILD_EDITION} by wcatox | Канал: @{current_source_channel} -> Бот: @{current_target_bot}", flush=True)
+    warmup_lbl = f"ВКЛ ({'MEGA 99% Human' if warmup_mode == 'mega' else 'Обычный'})" if enable_warmup else "ВЫКЛ"
     print(
-        f"[*] Smart Jitter: {'ВКЛ' if enable_jitter else 'ВЫКЛ'} | Авто-вывод (от {min_w}₽): {'ВКЛ' if auto_w else 'ВЫКЛ'} | Стелс-прогрев: {'ВКЛ' if enable_warmup else 'ВЫКЛ'}",
+        f"[*] Smart Jitter: {'ВКЛ' if enable_jitter else 'ВЫКЛ'} | Авто-вывод (от {min_w}₽): {'ВКЛ' if auto_w else 'ВЫКЛ'} | Прогрев: {warmup_lbl}",
         flush=True,
     )
 
