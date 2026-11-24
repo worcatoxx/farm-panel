@@ -1,0 +1,10 @@
+flask
+telethon
+requests
+pillow
+numpy
+opencv-python-headless
+rapidocr-onnxruntime
+cryptg
+PySocks
+python-socks[asyncio]
