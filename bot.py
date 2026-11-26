@@ -97,14 +97,20 @@ except Exception as _e:
 
 from telethon import TelegramClient, events
 from telethon.errors import (
+    ActiveUserRequiredError,
     AuthKeyDuplicatedError,
+    AuthKeyInvalidError,
+    AuthKeyPermEmptyError,
     AuthKeyUnregisteredError,
     ChannelsTooMuchError,
     ChatWriteForbiddenError,
     FloodWaitError,
     InviteRequestSentError,
     PhoneNumberBannedError,
+    SessionExpiredError,
+    SessionPasswordNeededError,
     SessionRevokedError,
+    UnauthorizedError,
     UserAlreadyParticipantError,
     UserDeactivatedBanError,
     UserDeactivatedError,
@@ -120,8 +126,10 @@ from telethon.tl.functions.messages import (
     SendReactionRequest,
     SetTypingRequest,
 )
+from telethon.tl.functions.users import GetUsersRequest
 from telethon.tl.types import (
     Channel,
+    InputUserSelf,
     MessageEntityCode,
     MessageEntityPre,
     ReactionEmoji,
@@ -193,7 +201,11 @@ FATAL_ERROR_TYPES = (
     UserDeactivatedBanError,
     AuthKeyUnregisteredError,
     AuthKeyDuplicatedError,
+    AuthKeyInvalidError,
+    AuthKeyPermEmptyError,
     SessionRevokedError,
+    SessionExpiredError,
+    ActiveUserRequiredError,
     PhoneNumberBannedError,
 )
 
@@ -203,7 +215,10 @@ FATAL_ERROR_KEYWORDS = (
     "banned",
     "auth_key_unregistered",
     "auth_key_duplicated",
+    "auth_key_invalid",
+    "auth_key_perm_empty",
     "session_revoked",
+    "session_expired",
     "user_deactivated",
 )
 
@@ -385,10 +400,29 @@ def apply_network_binding(kwargs: dict, bind_ip: str | None):
         kwargs["local_addr"] = (t, 0)
 
 def is_fatal_account_error(exc: Exception) -> bool:
+    if isinstance(exc, SessionPasswordNeededError):
+        return False
     if isinstance(exc, FATAL_ERROR_TYPES):
         return True
     err_msg = str(exc).lower()
     return any(k in err_msg for k in FATAL_ERROR_KEYWORDS)
+
+
+async def fetch_verified_self(client):
+    """Fetch authorized user via GetUsersRequest without masking transient RPC errors as unauth."""
+    session = getattr(client, "session", None)
+    if session is not None and not getattr(session, "auth_key", None):
+        raise AuthKeyUnregisteredError(request=None)
+    users = await client(GetUsersRequest([InputUserSelf()]))
+    me = users[0] if users else None
+    if me is not None:
+        mb_cache = getattr(client, "_mb_entity_cache", None)
+        if mb_cache is not None and not getattr(mb_cache, "self_id", None):
+            try:
+                mb_cache.set_self_user(me.id, me.bot, me.access_hash)
+            except Exception:
+                pass
+    return me
 
 
 def resolve_session_path(session_name: str) -> str:
@@ -2447,27 +2481,27 @@ async def connect_single_account(
 
     try:
         await c.connect()
-        if not await c.is_user_authorized():
-            fatal_death_reason = "Сессия сброшена / не авторизована"
+        me = await fetch_verified_self(c)
+        if not me or getattr(me, "deleted", False):
+            fatal_death_reason = "Аккаунт удален в Telegram"
         else:
-            me = await c.get_me()
-            if not me or getattr(me, "deleted", False):
-                fatal_death_reason = "Аккаунт удален в Telegram"
-            else:
-                is_alive = True
-                clients.append(c)
-                client_sessions[c] = session_name
-                session_to_client[session_name] = c
-                client_bind_ip[c] = bind_ip
-                uname = f"@{me.username}" if getattr(me, "username", None) else (acc.get("phone") or "-")
-                client_meta[c] = f"{me.first_name or session_name} ({uname})"
-                print(
-                    f"[+] Сессия {session_name} онлайн: {me.first_name} [{device_info['device_model']}] ({acc.get('phone', '-')})",
-                    flush=True,
-                )
+            is_alive = True
+            clients.append(c)
+            client_sessions[c] = session_name
+            session_to_client[session_name] = c
+            client_bind_ip[c] = bind_ip
+            uname = f"@{me.username}" if getattr(me, "username", None) else (acc.get("phone") or "-")
+            client_meta[c] = f"{me.first_name or session_name} ({uname})"
+            print(
+                f"[+] Сессия {session_name} онлайн: {me.first_name} [{device_info['device_model']}] ({acc.get('phone', '-')})",
+                flush=True,
+            )
     except Exception as e:
         if is_fatal_account_error(e):
-            fatal_death_reason = f"Бан / Сброс сессии: {e}"
+            if isinstance(e, UnauthorizedError) and not isinstance(e, SessionPasswordNeededError):
+                fatal_death_reason = f"Сессия сброшена / не авторизована ({type(e).__name__}: {e})"
+            else:
+                fatal_death_reason = f"Бан / Сброс сессии: {e}"
         else:
             log_net_proxy(
                 f"Сессия {session_name} временно недоступна (сеть/таймаут): {e}"
@@ -2685,9 +2719,7 @@ async def keep_alive_and_hot_reload():
                 try:
                     if not c.is_connected():
                         await c.connect()
-                    if not await c.is_user_authorized():
-                        raise AuthKeyUnregisteredError(request=None)
-                    me = await c.get_me()
+                    me = await fetch_verified_self(c)
                     if not me or getattr(me, "deleted", False):
                         raise UserDeactivatedError(request=None)
                 except Exception as e:

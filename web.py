@@ -39,6 +39,7 @@ from telethon.errors import (
     PhoneNumberInvalidError,
     SessionPasswordNeededError,
     SessionRevokedError,
+    UnauthorizedError,
     UserDeactivatedBanError,
     UserDeactivatedError,
     UserRestrictedError,
@@ -62,6 +63,7 @@ from bot import (
     _atomic_write_json,
     extract_voucher_from_image,
     extract_voucher_from_message,
+    fetch_verified_self,
     get_device_fingerprint,
     is_fatal_account_error,
     parse_balance_from_text,
@@ -1119,14 +1121,12 @@ async def _measure_acc_ping(acc: dict, sem: asyncio.Semaphore) -> tuple[str, str
         try:
             t0 = time.perf_counter()
             await client.connect()
-            if await client.is_user_authorized():
-                await client(PingRequest(ping_id=random.randint(1000, 999999)))
-                elapsed = (time.perf_counter() - t0) * 1000
-                ping_res = f"{int(elapsed)} ms"
-            else:
-                ping_res = "unauth"
-        except Exception:
-            ping_res = "err"
+            await fetch_verified_self(client)
+            await client(PingRequest(ping_id=random.randint(1000, 999999)))
+            elapsed = (time.perf_counter() - t0) * 1000
+            ping_res = f"{int(elapsed)} ms"
+        except Exception as e:
+            ping_res = "unauth" if is_fatal_account_error(e) else "err"
         finally:
             try:
                 await client.disconnect()
@@ -1250,8 +1250,7 @@ async def _direct_stealth_warmup(target_session: str | None = None):
             client = TelegramClient(tmp_session, **kwargs)
             try:
                 await client.connect()
-                if not await client.is_user_authorized():
-                    return
+                await fetch_verified_self(client)
                 ok = await warmup_single_client(
                     client,
                     channels,
@@ -1326,9 +1325,9 @@ async def _verify_uploaded_session_path(tmp_session: str, session_hint: str, api
     client = TelegramClient(tmp_session, **kwargs)
     try:
         await client.connect()
-        if not await client.is_user_authorized():
+        me = await fetch_verified_self(client)
+        if not me or getattr(me, "deleted", False):
             return False, "-", ""
-        me = await client.get_me()
         phone = f"+{me.phone}" if getattr(me, "phone", None) else "-"
         first_name = str(getattr(me, "first_name", "") or "")
         return True, phone, first_name
@@ -1584,6 +1583,10 @@ async def _do_finish(client: TelegramClient, phone: str, code: str, code_hash: s
         await client.sign_in(password=pwd)
 
     me = await client.get_me()
+    try:
+        client.session.save()
+    except Exception:
+        pass
     await client.disconnect()
     return me
 
@@ -1820,8 +1823,7 @@ async def _fetch_acc_balance(acc: dict, target_bot: str, sem: asyncio.Semaphore)
         client = TelegramClient(tmp_session, **kwargs)
         try:
             await client.connect()
-            if not await client.is_user_authorized():
-                return s_name, balance_val
+            await fetch_verified_self(client)
 
             peer = await client.get_input_entity(target_bot)
             cmd = await client.send_message(peer, "/balance")
@@ -1952,7 +1954,9 @@ async def _withdraw_acc(acc: dict, target_bot: str, site_login: str, min_withdra
         current_bal_str = None
         try:
             await client.connect()
-            if not await client.is_user_authorized():
+            try:
+                await fetch_verified_self(client)
+            except UnauthorizedError:
                 return s_name, False, "Не авторизован", 0.0, None
 
             peer = await client.get_input_entity(target_bot)
@@ -2231,25 +2235,24 @@ async def _health_check_acc(acc: dict, target_bot: str, sem: asyncio.Semaphore) 
         death_reason = ""
         try:
             await client.connect()
-            if not await client.is_user_authorized():
+            me = await fetch_verified_self(client)
+            if not me or getattr(me, "deleted", False):
                 is_alive = False
-                death_reason = "Сессия сброшена / не авторизована"
+                death_reason = "Аккаунт удален в Telegram"
             else:
-                me = await client.get_me()
-                if not me or getattr(me, "deleted", False):
-                    is_alive = False
-                    death_reason = "Аккаунт удален в Telegram"
-                else:
-                    try:
-                        await client.send_message(target_bot, "/start")
-                    except Exception as e:
-                        if is_fatal_account_error(e):
-                            is_alive = False
-                            death_reason = f"Бан Telegram: {e}"
+                try:
+                    await client.send_message(target_bot, "/start")
+                except Exception as e:
+                    if is_fatal_account_error(e):
+                        is_alive = False
+                        death_reason = f"Бан Telegram: {e}"
         except Exception as e:
             if is_fatal_account_error(e):
                 is_alive = False
-                death_reason = f"Бан / Сброс: {e}"
+                if isinstance(e, UnauthorizedError) and not isinstance(e, SessionPasswordNeededError):
+                    death_reason = f"Сессия сброшена / не авторизована ({type(e).__name__})"
+                else:
+                    death_reason = f"Бан / Сброс: {e}"
             else:
                 print(f"[WARN] [{s_name}] Таймаут при проверке здоровья: {e}", flush=True)
         finally:
