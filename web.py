@@ -265,6 +265,25 @@ def build_client_kwargs(acc: dict) -> dict:
     return kwargs
 
 
+DEFAULT_API_ID = 2040
+DEFAULT_API_HASH = "b18441a1ff607e10a989891a5462e627"
+
+
+def _parse_api_creds(
+    raw_id,
+    raw_hash,
+    fallback_id: int = DEFAULT_API_ID,
+    fallback_hash: str = DEFAULT_API_HASH,
+) -> tuple[int, str]:
+    """Parse and validate Telegram api_id and api_hash with safe defaults."""
+    id_str = str(raw_id or "").strip()
+    api_id = int(id_str) if id_str.isdigit() and int(id_str) > 0 else int(fallback_id or DEFAULT_API_ID)
+    hash_str = str(raw_hash or "").strip()
+    if not hash_str:
+        hash_str = str(fallback_hash or DEFAULT_API_HASH)
+    return api_id, hash_str
+
+
 def load_settings() -> dict:
     default_settings = {
         "admin_user": "admin",
@@ -288,6 +307,9 @@ def load_settings() -> dict:
         "warmup_channels": "telegram, durov",
         "auto_join_warmup_channels": True,
         "auto_start_target_bot": True,
+        "use_custom_api": False,
+        "default_api_id": DEFAULT_API_ID,
+        "default_api_hash": DEFAULT_API_HASH,
         "last_warmup_at": "",
         "nodes": [],
     }
@@ -1243,9 +1265,27 @@ async def _verify_uploaded_session(session_name: str, api_id: int, api_hash: str
 def upload_session_route():
     files = request.files.getlist("session_files")
     bind_ip = request.form.get("bind_ip", "").strip()
-    api_id_str = request.form.get("api_id", "2040").strip()
-    api_id = int(api_id_str) if api_id_str.isdigit() else 2040
-    api_hash = request.form.get("api_hash", "b18441a1ff607e10a989891a5462e627").strip() or "b18441a1ff607e10a989891a5462e627"
+    settings = load_settings()
+    if "use_custom_api" in request.form:
+        use_custom = str(request.form.get("use_custom_api", "")).strip().lower() in ("1", "true", "on", "yes")
+    else:
+        use_custom = bool(settings.get("use_custom_api", False))
+
+    if use_custom:
+        fb_id = settings.get("default_api_id", DEFAULT_API_ID)
+        fb_hash = settings.get("default_api_hash", DEFAULT_API_HASH)
+        api_id, api_hash = _parse_api_creds(
+            request.form.get("api_id") or fb_id,
+            request.form.get("api_hash") or fb_hash,
+            fb_id,
+            fb_hash,
+        )
+        settings["use_custom_api"] = True
+        settings["default_api_id"] = api_id
+        settings["default_api_hash"] = api_hash
+        save_settings(settings)
+    else:
+        api_id, api_hash = DEFAULT_API_ID, DEFAULT_API_HASH
 
     accs = load_accounts()
     accs_map = {sanitize_session_name(a.get("session", "")): a for a in accs}
@@ -1461,9 +1501,24 @@ def start_phone_login():
         clean_phone = re.sub(r"[^0-9]", "", phone)
         session_name = f"acc_{clean_phone[-4:] if len(clean_phone) >= 4 else 'new'}"
 
-    api_id_str = request.form.get("api_id", "").strip() or "2040"
-    api_id = int(api_id_str) if api_id_str.isdigit() else 2040
-    api_hash = request.form.get("api_hash", "").strip() or "b18441a1ff607e10a989891a5462e627"
+    settings = load_settings()
+    use_custom = bool(request.form.get("use_custom_api"))
+    if use_custom:
+        api_id, api_hash = _parse_api_creds(
+            request.form.get("api_id"),
+            request.form.get("api_hash"),
+            settings.get("default_api_id", DEFAULT_API_ID),
+            settings.get("default_api_hash", DEFAULT_API_HASH),
+        )
+        settings["use_custom_api"] = True
+        settings["default_api_id"] = api_id
+        settings["default_api_hash"] = api_hash
+        save_settings(settings)
+    else:
+        if settings.get("use_custom_api"):
+            settings["use_custom_api"] = False
+            save_settings(settings)
+        api_id, api_hash = DEFAULT_API_ID, DEFAULT_API_HASH
     bind_ip = request.form.get("bind_ip", "").strip()
 
     if not phone:
@@ -2323,6 +2378,38 @@ def api_toggle_push():
         settings["push_notifications_enabled"] = not settings.get("push_notifications_enabled", True)
     save_settings(settings)
     return jsonify({"ok": True, "push_notifications_enabled": settings["push_notifications_enabled"]})
+
+
+@app.route("/api/settings/api-creds", methods=["POST"])
+def api_save_custom_api_creds():
+    """Persist default Telegram API ID / API Hash and toggle state across reloads."""
+    settings = load_settings()
+    req_data = request.get_json(silent=True) or {}
+    use_custom = bool(req_data.get("use_custom_api", settings.get("use_custom_api", False)))
+    raw_id = str(req_data.get("api_id", "")).strip()
+    raw_hash = str(req_data.get("api_hash", "")).strip()
+
+    if raw_id and not (raw_id.isdigit() and int(raw_id) > 0):
+        return jsonify({"ok": False, "error": "API ID должен состоять только из цифр"}), 400
+    if raw_hash and not re.fullmatch(r"[a-fA-F0-9]{32}", raw_hash):
+        return jsonify({"ok": False, "error": "API Hash должен содержать 32 hex-символа"}), 400
+
+    api_id, api_hash = _parse_api_creds(
+        raw_id,
+        raw_hash,
+        settings.get("default_api_id", DEFAULT_API_ID),
+        settings.get("default_api_hash", DEFAULT_API_HASH),
+    )
+    settings["use_custom_api"] = use_custom
+    settings["default_api_id"] = api_id
+    settings["default_api_hash"] = api_hash
+    save_settings(settings)
+    return jsonify({
+        "ok": True,
+        "use_custom_api": settings["use_custom_api"],
+        "api_id": settings["default_api_id"],
+        "api_hash": settings["default_api_hash"],
+    })
 
 
 @app.route("/service/restart", methods=["POST"])

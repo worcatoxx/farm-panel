@@ -212,6 +212,9 @@
             border-color: var(--accent);
             box-shadow: 0 0 0 3px var(--accent-ring);
         }
+        :is(.field-input:user-invalid, .field-input.user-invalid-fallback) {
+            border-color: var(--negative);
+        }
 
         select.field-input {
             -webkit-appearance: none;
@@ -1056,19 +1059,29 @@
 
                             <div class="sm:col-span-2 lg:col-span-4 pt-1">
                                 <label class="inline-flex items-center gap-2 text-xs text-[#85858b] cursor-pointer select-none">
-                                    <input type="checkbox" class="native-check accent-[#3b82f6]" onchange="toggleCustomApiFields(this.checked)">
+                                    <input id="use-custom-api-chk" type="checkbox" name="use_custom_api" value="1" aria-expanded="{{ 'true' if settings.use_custom_api|default(false) else 'false' }}" aria-controls="custom-api-fields" class="native-check accent-[#3b82f6]" onchange="toggleCustomApiFields(this.checked, true)" {% if settings.use_custom_api|default(false) %}checked{% endif %}>
                                     <span>Указать свои API ID и API Hash</span>
                                 </label>
-                                <div id="custom-api-fields" class="collapsible-wrapper is-collapsed" aria-hidden="true" inert>
+                                <div id="custom-api-fields" class="collapsible-wrapper {% if not settings.use_custom_api|default(false) %}is-collapsed{% endif %}" {% if not settings.use_custom_api|default(false) %}aria-hidden="true" inert{% else %}aria-hidden="false"{% endif %}>
                                     <div class="collapsible-inner">
-                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-white/[0.08]">
-                                            <div>
-                                                <label for="add-api-id" class="text-xs text-[#85858b] block mb-1">API ID</label>
-                                                <input id="add-api-id" name="api_id" value="2040" class="field-input w-full h-8 px-3 text-xs font-mono">
+                                        <div class="mt-3 pt-3 border-t border-white/[0.08] flex flex-col gap-3">
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label for="add-api-id" class="text-xs text-[#85858b] block mb-1">API ID</label>
+                                                    <input id="add-api-id" name="api_id" type="text" inputmode="numeric" pattern="\d+" autocorrect="off" autocapitalize="none" spellcheck="false" autocomplete="off" aria-describedby="custom-api-hint" value="{{ settings.default_api_id|default(2040) }}" {% if settings.use_custom_api|default(false) %}required{% else %}disabled{% endif %} class="field-input w-full h-8 px-3 text-xs font-mono">
+                                                </div>
+                                                <div>
+                                                    <label for="add-api-hash" class="text-xs text-[#85858b] block mb-1">API Hash</label>
+                                                    <input id="add-api-hash" name="api_hash" type="text" pattern="[a-fA-F0-9]{32}" maxlength="32" autocorrect="off" autocapitalize="none" spellcheck="false" autocomplete="off" aria-describedby="custom-api-hint" value="{{ settings.default_api_hash|default('b18441a1ff607e10a989891a5462e627') }}" {% if settings.use_custom_api|default(false) %}required{% else %}disabled{% endif %} class="field-input w-full h-8 px-3 text-xs font-mono">
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label for="add-api-hash" class="text-xs text-[#85858b] block mb-1">API Hash</label>
-                                                <input id="add-api-hash" name="api_hash" value="b18441a1ff607e10a989891a5462e627" class="field-input w-full h-8 px-3 text-xs font-mono">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <span id="custom-api-hint" class="text-[11px] text-[#85858b]">API ID (цифры) и API Hash (32 hex-символа) сохраняются для новых ботов; старые сессии сохраняют свои ключи.</span>
+                                                <div class="flex items-center gap-2 shrink-0">
+                                                    <span id="custom-api-save-status" role="status" aria-live="polite" class="text-[11px] font-mono text-[#4cc38a]"></span>
+                                                    <button type="button" onclick="resetCustomApiCreds()" class="btn-surface h-7 px-2.5 text-[11px] cursor-pointer">Сброс (2040)</button>
+                                                    <button type="button" onclick="saveCustomApiCreds(true)" class="btn-surface h-7 px-3 text-[11px] cursor-pointer">Сохранить API</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1076,7 +1089,10 @@
                             </div>
                         </form>
 
-                        <form id="add-form-file" action="/upload-session" method="post" enctype="multipart/form-data" class="anim-panel hidden grid grid-cols-1 sm:grid-cols-3 gap-3 items-end" onsubmit="showLoading('Импорт сессий', 'Проверяем валидность файлов .session в Telegram')">
+                        <form id="add-form-file" action="/upload-session" method="post" enctype="multipart/form-data" class="anim-panel hidden grid grid-cols-1 sm:grid-cols-3 gap-3 items-end" onsubmit="syncFileFormApiCreds(); showLoading('Импорт сессий', 'Проверяем валидность файлов .session в Telegram')">
+                            <input type="hidden" id="file-use-custom-api" name="use_custom_api" value="{{ '1' if settings.use_custom_api|default(false) else '0' }}">
+                            <input type="hidden" id="file-api-id" name="api_id" value="{{ settings.default_api_id|default(2040) }}">
+                            <input type="hidden" id="file-api-hash" name="api_hash" value="{{ settings.default_api_hash|default('b18441a1ff607e10a989891a5462e627') }}">
                             <div>
                                 <label for="upload-session-files" class="text-xs text-[#a1a1a6] block mb-1.5">Файлы .session</label>
                                 <input id="upload-session-files" type="file" name="session_files" accept=".session" multiple required class="field-input w-full h-9 px-2 py-1 text-xs text-[#a1a1a6] file:mr-3 file:py-1 file:px-2.5 file:rounded-[6px] file:border-0 file:text-xs file:font-medium file:bg-[#ededed] file:text-[#0f0f10] cursor-pointer">
@@ -2227,14 +2243,157 @@
             }
         }
 
-        function toggleCustomApiFields(open) {
+        let _apiSaveTimer = null;
+
+        function syncFileFormApiCreds() {
+            const chk = document.getElementById('use-custom-api-chk');
+            const idInp = document.getElementById('add-api-id');
+            const hashInp = document.getElementById('add-api-hash');
+            const fUse = document.getElementById('file-use-custom-api');
+            const fId = document.getElementById('file-api-id');
+            const fHash = document.getElementById('file-api-hash');
+            if (fUse && chk) fUse.value = chk.checked ? '1' : '0';
+            if (fId && idInp) fId.value = idInp.value.trim();
+            if (fHash && hashInp) fHash.value = hashInp.value.trim();
+        }
+
+        function _validateApiInputs(report = false) {
+            const chk = document.getElementById('use-custom-api-chk');
+            const idInp = document.getElementById('add-api-id');
+            const hashInp = document.getElementById('add-api-hash');
+            if (!idInp || !hashInp) return true;
+            const idVal = idInp.value.trim();
+            const hashVal = hashInp.value.trim();
+            idInp.setCustomValidity('');
+            hashInp.setCustomValidity('');
+            if (chk && !chk.checked) return true;
+
+            if (!/^\d+$/.test(idVal) || parseInt(idVal, 10) <= 0) {
+                idInp.setCustomValidity('Укажите числовой API ID (только цифры).');
+                if (report) idInp.reportValidity();
+                return false;
+            }
+            if (!/^[a-fA-F0-9]{32}$/.test(hashVal)) {
+                hashInp.setCustomValidity('API Hash должен состоять из 32 hex-символов.');
+                if (report) hashInp.reportValidity();
+                return false;
+            }
+            return true;
+        }
+
+        async function saveCustomApiCreds(manual = false) {
+            const chk = document.getElementById('use-custom-api-chk');
+            const idInp = document.getElementById('add-api-id');
+            const hashInp = document.getElementById('add-api-hash');
+            const st = document.getElementById('custom-api-save-status');
+            if (!chk || !idInp || !hashInp) return;
+
+            syncFileFormApiCreds();
+            if (!_validateApiInputs(manual)) {
+                if (st) {
+                    st.textContent = 'Проверьте формат';
+                    st.className = 'text-[11px] font-mono text-[#e5484d]';
+                }
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/settings/api-creds', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        use_custom_api: chk.checked,
+                        api_id: idInp.value.trim(),
+                        api_hash: hashInp.value.trim(),
+                    }),
+                });
+                const d = await res.json();
+                if (!res.ok || !d.ok) {
+                    if (st) {
+                        st.textContent = d.error || 'Ошибка';
+                        st.className = 'text-[11px] font-mono text-[#e5484d]';
+                    }
+                    if (manual) showToast(d.error || 'Не удалось сохранить API');
+                    return;
+                }
+                if (d.api_id) idInp.value = String(d.api_id);
+                if (d.api_hash) hashInp.value = String(d.api_hash);
+                syncFileFormApiCreds();
+                if (st) {
+                    st.textContent = 'Сохранено';
+                    st.className = 'text-[11px] font-mono text-[#4cc38a]';
+                }
+                if (manual) showToast('API ID и API Hash сохранены');
+            } catch (e) {
+                if (manual) showToast('Ошибка сохранения API');
+            }
+        }
+
+        function resetCustomApiCreds() {
+            const chk = document.getElementById('use-custom-api-chk');
+            const idInp = document.getElementById('add-api-id');
+            const hashInp = document.getElementById('add-api-hash');
+            if (idInp) {
+                idInp.value = '2040';
+                idInp.setCustomValidity('');
+            }
+            if (hashInp) {
+                hashInp.value = 'b18441a1ff607e10a989891a5462e627';
+                hashInp.setCustomValidity('');
+            }
+            if (chk) chk.checked = false;
+            toggleCustomApiFields(false, true);
+            showToast('Восстановлены стандартные ключи 2040');
+        }
+
+        function toggleCustomApiFields(open, persist = false) {
             const wrap = document.getElementById('custom-api-fields');
+            const chk = document.getElementById('use-custom-api-chk');
+            const idInp = document.getElementById('add-api-id');
+            const hashInp = document.getElementById('add-api-hash');
             if (!wrap) return;
             const shouldOpen = !!open;
             wrap.classList.toggle('is-collapsed', !shouldOpen);
             wrap.toggleAttribute('inert', !shouldOpen);
             wrap.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+            if (chk) chk.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            if (idInp) {
+                idInp.disabled = !shouldOpen;
+                idInp.required = shouldOpen;
+            }
+            if (hashInp) {
+                hashInp.disabled = !shouldOpen;
+                hashInp.required = shouldOpen;
+            }
+            syncFileFormApiCreds();
+            if (persist) saveCustomApiCreds(false);
         }
+
+        (function initCustomApiListeners() {
+            const idInp = document.getElementById('add-api-id');
+            const hashInp = document.getElementById('add-api-hash');
+            const st = document.getElementById('custom-api-save-status');
+            [idInp, hashInp].forEach(el => {
+                if (!el) return;
+                el.addEventListener('input', () => {
+                    el.setCustomValidity('');
+                    syncFileFormApiCreds();
+                    if (st) {
+                        st.textContent = 'Не сохранено...';
+                        st.className = 'text-[11px] font-mono text-[#85858b]';
+                    }
+                    clearTimeout(_apiSaveTimer);
+                    _apiSaveTimer = setTimeout(() => {
+                        if (_validateApiInputs(false)) saveCustomApiCreds(false);
+                    }, 550);
+                });
+                el.addEventListener('blur', () => {
+                    clearTimeout(_apiSaveTimer);
+                    if (_validateApiInputs(false)) saveCustomApiCreds(false);
+                });
+            });
+            syncFileFormApiCreds();
+        })();
 
         function toggleConsolePanel(forceOpen = null) {
             const wrap = document.getElementById('console-panel-wrap');
