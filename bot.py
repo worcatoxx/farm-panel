@@ -107,6 +107,7 @@ from telethon.errors import (
     FloodWaitError,
     InviteRequestSentError,
     PhoneNumberBannedError,
+    ReactionInvalidError,
     SessionExpiredError,
     SessionPasswordNeededError,
     SessionRevokedError,
@@ -119,7 +120,7 @@ from telethon.errors import (
     UsernameNotOccupiedError,
 )
 from telethon.tl.functions.account import UpdateStatusRequest
-from telethon.tl.functions.channels import JoinChannelRequest
+from telethon.tl.functions.channels import GetFullChannelRequest, JoinChannelRequest
 from telethon.tl.functions.messages import (
     GetAllStickersRequest,
     GetMessagesViewsRequest,
@@ -129,6 +130,9 @@ from telethon.tl.functions.messages import (
 from telethon.tl.functions.users import GetUsersRequest
 from telethon.tl.types import (
     Channel,
+    ChatReactionsAll,
+    ChatReactionsNone,
+    ChatReactionsSome,
     InputUserSelf,
     MessageEntityCode,
     MessageEntityPre,
@@ -242,6 +246,10 @@ _warmup_auto_sem = asyncio.Semaphore(3)
 _onboarding_sem = asyncio.Semaphore(2)
 _onboarding_active_sessions = set()
 _onboarding_retry_after = {}
+_active_reaction_tasks = set()
+_reacted_post_keys = set()
+_channel_fallback_reactions = {}
+_DEFAULT_REACTION_POOL = ("🔥", "👍", "❤️", "⚡", "👏", "🎉", "😁", "💯")
 autowithdraw_locks = set()
 _global_bot_withdraw_lock = asyncio.Lock()
 WITHDRAW_LOCK_FILE = os.path.join(DATA_DIR, ".withdraw_transfer.lock")
@@ -2199,13 +2207,22 @@ def detect_voucher_teaser(raw_text: str) -> dict | None:
             "badge": "Скоро дроп"
         }
 
-    # 3. Вопрос/голосование («Делаем сегодня ваучер?», «набираем 70 реакций»)
+    # 3. Вопрос/голосование («Делаем сегодня ваучер?», «набираем 50 реакций под этим постом»)
     is_teaser_poll = any(k in lower for k in [
         "делаем сегодня ваучер",
         "делаем ваучер",
         "набираем",
+        "наберем",
+        "наберём",
+        "добьем",
+        "добьём",
+        "соберем",
+        "соберём",
+        "под этим постом",
+        "на этом посте",
         "реакций на этом посте",
         "реакции на этот пост",
+        "накидайте реакц",
         "хотите ваучер",
         "раздать ваучер",
     ])
@@ -2285,6 +2302,223 @@ async def fast_download_media_bytes(msg) -> tuple[bytes | None, float]:
     return None, 0.0
 
 
+_DEFAULT_SAFE_REACTION_FALLBACK = ReactionEmoji(emoticon="🔥")
+
+
+def pick_most_popular_reaction(msg) -> ReactionEmoji | None:
+    """Return the single standard emoji reaction with the highest count on msg."""
+    results = getattr(getattr(msg, "reactions", None), "results", None)
+    if not results:
+        return None
+    best_count = -1
+    best_emojis: list[str] = []
+    for res in results:
+        rx = getattr(res, "reaction", None)
+        if isinstance(rx, ReactionEmoji) and getattr(rx, "emoticon", None):
+            cnt = int(getattr(res, "count", 0) or 0)
+            if cnt > best_count:
+                best_count = cnt
+                best_emojis = [rx.emoticon]
+            elif cnt == best_count:
+                best_emojis.append(rx.emoticon)
+    if not best_emojis:
+        return None
+    chosen = best_emojis[0] if len(best_emojis) == 1 else random.choice(best_emojis)
+    return ReactionEmoji(emoticon=chosen)
+
+
+def _client_already_reacted(msg) -> bool:
+    results = getattr(getattr(msg, "reactions", None), "results", None) or []
+    return any(getattr(res, "chosen_order", None) is not None for res in results)
+
+
+def generate_staggered_reaction_delays(count: int, min_sec: float = 60.0, max_sec: float = 300.0) -> list[float]:
+    """Generate varied per-account delays inside [min_sec, max_sec] avoiding bursts."""
+    if count <= 0:
+        return []
+    lo = max(1.0, float(min_sec))
+    hi = max(lo, float(max_sec))
+    if count == 1 or hi <= lo:
+        return [round(random.uniform(lo, hi), 2)]
+    delays = sorted(random.uniform(lo, hi) for _ in range(count))
+    min_gap = min(2.0, (hi - lo) / max(1, count * 2))
+    for i in range(1, count):
+        if delays[i] - delays[i - 1] < min_gap:
+            delays[i] = min(hi, delays[i - 1] + min_gap)
+    for i in range(count - 2, -1, -1):
+        if delays[i + 1] - delays[i] < min_gap:
+            delays[i] = max(lo, delays[i + 1] - min_gap)
+    return [round(d, 2) for d in delays]
+
+
+def detect_reaction_call_post(raw_text: str, teaser: dict | None = None) -> bool:
+    """Return True when a channel post invites reactions or announces an upcoming drop."""
+    if teaser:
+        if teaser.get("type") == "countdown":
+            return False
+        if teaser.get("type") in ("teaser_poll", "drop_soon"):
+            return True
+    text_clean = (raw_text or "").strip()
+    if not text_clean or re.match(r"^(?:[🔥⚡⏳⏱️💥⚠️🔔🚨\s]*)([1-9]|10)(?:[\.\!\?\s🔥⚡⏳⏱️💥⚠️🔔🚨]*)$", text_clean):
+        return False
+    lower = text_clean.lower()
+    if any(k in lower for k in (
+        "реакц", "набира", "наберем", "наберём", "добьем", "добьём",
+        "соберем", "соберём", "накида", "под этим постом", "на этом посте",
+        "огонь", "огоньк", "лайк", "ставь", "ставьте", "прожми",
+        "актив", "кто тут", "делаем", "хотите", "раздач",
+    )):
+        return True
+    if "?" in text_clean and len(text_clean) >= 8:
+        return True
+    return bool(re.search(r"\b\d{1,4}\s+(?:реакц|огон|огн|лайк)", lower))
+
+
+async def _get_channel_fallback_reaction(client: TelegramClient, peer, cache_key) -> ReactionEmoji | None:
+    if cache_key in _channel_fallback_reactions:
+        return _channel_fallback_reactions[cache_key]
+    chosen: ReactionEmoji | None = _DEFAULT_SAFE_REACTION_FALLBACK
+    try:
+        full = await client(GetFullChannelRequest(peer))
+        avail = getattr(getattr(full, "full_chat", None), "available_reactions", None)
+        if isinstance(avail, ChatReactionsNone):
+            chosen = None
+        elif isinstance(avail, ChatReactionsSome):
+            allowed = [
+                r.emoticon for r in (getattr(avail, "reactions", None) or [])
+                if isinstance(r, ReactionEmoji) and getattr(r, "emoticon", None)
+            ]
+            if not allowed:
+                chosen = None
+            else:
+                pick = next((e for e in _DEFAULT_REACTION_POOL if e in allowed), allowed[0])
+                chosen = ReactionEmoji(emoticon=pick)
+        elif isinstance(avail, ChatReactionsAll):
+            chosen = _DEFAULT_SAFE_REACTION_FALLBACK
+    except Exception:
+        return _DEFAULT_SAFE_REACTION_FALLBACK
+    if len(_channel_fallback_reactions) > 100:
+        _channel_fallback_reactions.clear()
+    _channel_fallback_reactions[cache_key] = chosen
+    return chosen
+
+
+async def _react_single_client_delayed(
+    client: TelegramClient,
+    sess_name: str,
+    chat_id,
+    msg_id: int,
+    source_channel: str,
+    delay_sec: float,
+):
+    await asyncio.sleep(max(0.0, delay_sec))
+    settings = load_settings()
+    if not settings.get("auto_react_enabled", True):
+        return
+    if client not in clients:
+        return
+
+    try:
+        if not client.is_connected():
+            await client.connect()
+        try:
+            peer = await client.get_input_entity(chat_id if chat_id is not None else source_channel)
+        except Exception:
+            peer = await client.get_input_entity(source_channel)
+
+        try:
+            await client(GetMessagesViewsRequest(peer=peer, id=[msg_id], increment=True))
+        except Exception:
+            pass
+        await asyncio.sleep(random.uniform(0.6, 1.5))
+
+        live_msg = await client.get_messages(peer, ids=msg_id)
+        if not live_msg or _client_already_reacted(live_msg):
+            return
+
+        cache_key = chat_id or source_channel
+        rx = pick_most_popular_reaction(live_msg)
+        if rx is None:
+            rx = await _get_channel_fallback_reaction(client, peer, cache_key)
+        if rx is None:
+            return
+
+        try:
+            await client(SendReactionRequest(peer=peer, msg_id=msg_id, reaction=[rx], add_to_recent=True))
+        except ReactionInvalidError:
+            _channel_fallback_reactions.pop(cache_key, None)
+            fb = await _get_channel_fallback_reaction(client, peer, cache_key)
+            if fb is None or fb.emoticon == rx.emoticon:
+                return
+            rx = fb
+            await client(SendReactionRequest(peer=peer, msg_id=msg_id, reaction=[rx], add_to_recent=True))
+
+        print(
+            f"[REACTION] [{sess_name}] Поставил {rx.emoticon} на пост #{msg_id} (через {int(round(delay_sec))}с)",
+            flush=True,
+        )
+    except FloodWaitError as e:
+        print(f"[WARN] [REACTION] FloodWait на {sess_name}: {e.seconds}с", flush=True)
+    except Exception as e:
+        print(f"[WARN] [REACTION] [{sess_name}] Ошибка реакции на пост #{msg_id}: {e}", flush=True)
+
+
+def maybe_schedule_auto_reaction(
+    msg,
+    chat_id,
+    raw_text: str,
+    is_voucher: bool = False,
+    teaser: dict | None = None,
+):
+    """Schedule gradual staggered single-reaction responses across active clients."""
+    msg_id = getattr(msg, "id", None)
+    if not msg_id:
+        return
+    settings = load_settings()
+    if not settings.get("auto_react_enabled", True):
+        return
+
+    scope = str(settings.get("auto_react_scope", "polls") or "polls").strip().lower()
+    if scope != "all":
+        if is_voucher or not detect_reaction_call_post(raw_text, teaser=teaser):
+            return
+
+    grouped_id = getattr(msg, "grouped_id", None)
+    dedup_key = (chat_id, f"g:{grouped_id}" if grouped_id else msg_id)
+    if dedup_key in _reacted_post_keys:
+        return
+    _reacted_post_keys.add(dedup_key)
+    if len(_reacted_post_keys) > 500:
+        _reacted_post_keys.clear()
+        _reacted_post_keys.add(dedup_key)
+
+    active_list = list(clients)
+    if not active_list:
+        return
+    random.shuffle(active_list)
+
+    try:
+        r_min_min = max(0.1, float(settings.get("auto_react_min_min", 1.0)))
+        r_max_min = max(r_min_min, float(settings.get("auto_react_max_min", 5.0)))
+    except (TypeError, ValueError):
+        r_min_min, r_max_min = 1.0, 5.0
+
+    delays = generate_staggered_reaction_delays(len(active_list), r_min_min * 60.0, r_max_min * 60.0)
+    source_channel = str(settings.get("source_channel", current_source_channel) or current_source_channel).lstrip("@").strip()
+    print(
+        f"[REACTION-PLAN] Пост #{msg_id}: запланировано {len(active_list)} акк. "
+        f"(окно {r_min_min:g}–{r_max_min:g} мин, 1 самая популярная реакция)",
+        flush=True,
+    )
+    for c, delay_sec in zip(active_list, delays):
+        sess_name = client_sessions.get(c, "unknown")
+        t = asyncio.create_task(
+            _react_single_client_delayed(c, sess_name, chat_id, int(msg_id), source_channel, delay_sec)
+        )
+        _active_reaction_tasks.add(t)
+        t.add_done_callback(_active_reaction_tasks.discard)
+
+
 async def handle_new_message(event):
     msg = event.message
     if not msg:
@@ -2292,7 +2526,8 @@ async def handle_new_message(event):
 
     # Защита от дублей и параллельного OCR при нескольких слушателях (listener_clients)
     # Если 2-3 слушателя получают один и тот же пост одновременно, обрабатывает только ПЕРВЫЙ!
-    msg_key = (getattr(event, "chat_id", None) or getattr(msg, "chat_id", None), msg.id)
+    chat_id_key = getattr(event, "chat_id", None) or getattr(msg, "chat_id", None)
+    msg_key = (chat_id_key, msg.id)
     if msg_key in processed_msg_keys:
         return
     processed_msg_keys.add(msg_key)
@@ -2352,31 +2587,31 @@ async def handle_new_message(event):
 
     if not voucher_code:
         settings = load_settings()
-        if settings.get("radar_teaser_enabled", True):
-            teaser = detect_voucher_teaser(raw_text)
-            if teaser:
-                now = time.time()
-                clean_snippet = teaser["body"][:60]
-                if clean_snippet != last_teaser_info.get("text") or (now - last_teaser_info.get("time", 0)) > 10:
-                    last_teaser_info["text"] = clean_snippet
-                    last_teaser_info["time"] = now
+        teaser = detect_voucher_teaser(raw_text)
+        if settings.get("radar_teaser_enabled", True) and teaser:
+            now = time.time()
+            clean_snippet = teaser["body"][:60]
+            if clean_snippet != last_teaser_info.get("text") or (now - last_teaser_info.get("time", 0)) > 10:
+                last_teaser_info["text"] = clean_snippet
+                last_teaser_info["time"] = now
 
-                    print(f"[РАДАР] {teaser['title']}: {teaser['body']}", flush=True)
+                print(f"[РАДАР] {teaser['title']}: {teaser['body']}", flush=True)
 
-                    push_mobile_event(
-                        event_type=teaser["type"],
-                        title=teaser["title"],
-                        body=teaser["body"],
-                        badge=teaser["badge"]
-                    )
+                push_mobile_event(
+                    event_type=teaser["type"],
+                    title=teaser["title"],
+                    body=teaser["body"],
+                    badge=teaser["badge"]
+                )
 
-                    # Если начался обратный отсчет (3, 2, 1) — мгновенно прогреваем сокеты сессий
-                    if teaser["type"] == "countdown":
-                        for c in list(clients)[:5]:
-                            try:
-                                asyncio.create_task(c.get_me())
-                            except Exception:
-                                pass
+                # Если начался обратный отсчет (3, 2, 1) — мгновенно прогреваем сокеты сессий
+                if teaser["type"] == "countdown":
+                    for c in list(clients)[:5]:
+                        try:
+                            asyncio.create_task(c.get_me())
+                        except Exception:
+                            pass
+        maybe_schedule_auto_reaction(msg, chat_id_key, raw_text, is_voucher=False, teaser=teaser)
         return
 
     solved_digit = None
@@ -2438,6 +2673,7 @@ async def handle_new_message(event):
     # Асинхронно проверяем ответы целевого бота (кто забрал ваучер, сколько рублей начислено и нужен ли авто-вывод)
     if ok_count > 0:
         asyncio.create_task(inspect_post_shot_responses(voucher_code, shot_records, target_bot))
+    maybe_schedule_auto_reaction(msg, chat_id_key, raw_text, is_voucher=True, teaser=None)
 
 
 async def connect_single_account(

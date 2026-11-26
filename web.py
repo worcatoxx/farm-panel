@@ -390,6 +390,10 @@ def load_settings() -> dict:
         "warmup_channels": "telegram, durov",
         "auto_join_warmup_channels": True,
         "auto_start_target_bot": True,
+        "auto_react_enabled": True,
+        "auto_react_scope": "polls",
+        "auto_react_min_min": 1.0,
+        "auto_react_max_min": 5.0,
         "use_custom_api": False,
         "default_api_id": DEFAULT_API_ID,
         "default_api_hash": DEFAULT_API_HASH,
@@ -2493,6 +2497,15 @@ def save_settings_route():
     settings["warmup_channels"] = request.form.get("warmup_channels", "telegram, durov").strip() or "telegram, durov"
     settings["auto_join_warmup_channels"] = bool(request.form.get("auto_join_warmup_channels"))
     settings["auto_start_target_bot"] = bool(request.form.get("auto_start_target_bot"))
+    settings["auto_react_enabled"] = bool(request.form.get("auto_react_enabled"))
+    settings["auto_react_scope"] = "all" if request.form.get("auto_react_scope") == "all" else "polls"
+    try:
+        r_min = round(max(0.1, float(request.form.get("auto_react_min_min", 1.0))), 2)
+        r_max = round(max(r_min, float(request.form.get("auto_react_max_min", 5.0))), 2)
+    except ValueError:
+        r_min, r_max = 1.0, 5.0
+    settings["auto_react_min_min"] = r_min
+    settings["auto_react_max_min"] = r_max
     settings["push_notifications_enabled"] = bool(request.form.get("push_notifications_enabled"))
     settings["radar_teaser_enabled"] = bool(request.form.get("radar_teaser_enabled"))
     save_settings(settings)
