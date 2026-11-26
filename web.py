@@ -146,6 +146,87 @@ def sanitize_session_name(name: str) -> str:
     return clean[:48]
 
 
+def _normalize_phone(phone: str) -> str:
+    return re.sub(r"[^0-9]", "", str(phone or ""))
+
+
+def _session_files_exist(session_name: str) -> bool:
+    s_clean = sanitize_session_name(session_name)
+    if not s_clean:
+        return False
+    return any(os.path.exists(os.path.join(base, f"{s_clean}.session")) for base in (DATA_DIR, BASE_DIR))
+
+
+def _remove_session_files(session_name: str):
+    s_clean = sanitize_session_name(session_name)
+    if not s_clean:
+        return
+    for base in (DATA_DIR, BASE_DIR):
+        for ext in (".session", ".session-journal", ".session-wal", ".session-shm"):
+            p = os.path.join(base, f"{s_clean}{ext}")
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+
+
+def allocate_unique_session_name(
+    base_name: str,
+    existing_accounts: list | None = None,
+    phone: str = "",
+    check_disk: bool = True,
+    ignore_sessions: set[str] | None = None,
+) -> str:
+    """Allocate a collision-free session name (_2, _3, ...) without overwriting different accounts."""
+    base = sanitize_session_name(base_name) or "acc"
+    accs = existing_accounts if existing_accounts is not None else load_accounts()
+    norm_p = _normalize_phone(phone)
+    ignored = {sanitize_session_name(s).lower() for s in (ignore_sessions or set()) if s}
+
+    same_phone_session = ""
+    taken_low: set[str] = set()
+    for a in accs:
+        s = sanitize_session_name(a.get("session", ""))
+        if not s or s.lower() in ignored:
+            continue
+        ap = _normalize_phone(a.get("phone", ""))
+        if len(norm_p) >= 7 and ap == norm_p and not same_phone_session:
+            same_phone_session = s
+        else:
+            taken_low.add(s.lower())
+
+    for ls in list(login_sessions.keys()):
+        s_ls = sanitize_session_name(ls)
+        if s_ls and s_ls.lower() not in ignored:
+            taken_low.add(s_ls.lower())
+
+    def _is_taken(cand: str) -> bool:
+        clow = cand.lower()
+        if clow in taken_low:
+            return True
+        if check_disk and clow not in ignored and _session_files_exist(cand):
+            return True
+        return False
+
+    if same_phone_session and not _is_taken(base):
+        if base.lower() == same_phone_session.lower():
+            return same_phone_session
+        return base
+
+    if not _is_taken(base):
+        return base
+
+    idx = 2
+    while True:
+        suffix = f"_{idx}"
+        prefix = base[: max(1, 48 - len(suffix))]
+        cand = f"{prefix}{suffix}"
+        if not _is_taken(cand):
+            return cand
+        idx += 1
+
+
 def resolve_session_file(session_name: str) -> str:
     s_clean = sanitize_session_name(session_name)
     data_path = os.path.join(DATA_DIR, s_clean)
@@ -1230,35 +1311,34 @@ def stealth_warmup_route():
 
 
 # --- Загрузка готовых .session файлов ---
-async def _verify_uploaded_session(session_name: str, api_id: int, api_hash: str, bind_ip: str) -> tuple[bool, str, str]:
-    dev_info = get_device_fingerprint(session_name)
+async def _verify_uploaded_session_path(tmp_session: str, session_hint: str, api_id: int, api_hash: str, bind_ip: str) -> tuple[bool, str, str]:
+    dev_info = get_device_fingerprint(session_hint)
     acc_stub = {
-        "session": session_name,
+        "session": session_hint,
         "api_id": api_id,
         "api_hash": api_hash,
         "bind_ip": bind_ip,
         **dev_info,
     }
-    tmp_session, _ = create_temp_web_session(session_name)
-    if not tmp_session:
-        return False, "", "Файл не сохранен"
+    if not tmp_session or not os.path.exists(f"{tmp_session}.session"):
+        return False, "", ""
     kwargs = build_client_kwargs(acc_stub)
     client = TelegramClient(tmp_session, **kwargs)
     try:
         await client.connect()
         if not await client.is_user_authorized():
-            return False, "-", "Сессия не авторизована"
+            return False, "-", ""
         me = await client.get_me()
         phone = f"+{me.phone}" if getattr(me, "phone", None) else "-"
-        return True, phone, ""
-    except Exception as e:
-        return False, "-", str(e)
+        first_name = str(getattr(me, "first_name", "") or "")
+        return True, phone, first_name
+    except Exception:
+        return False, "-", ""
     finally:
         try:
             await client.disconnect()
         except Exception:
             pass
-        cleanup_temp_web_session(tmp_session)
 
 
 @app.route("/upload-session", methods=["POST"])
@@ -1288,26 +1368,47 @@ def upload_session_route():
         api_id, api_hash = DEFAULT_API_ID, DEFAULT_API_HASH
 
     accs = load_accounts()
-    accs_map = {sanitize_session_name(a.get("session", "")): a for a in accs}
+    accs_map = {sanitize_session_name(a.get("session", "")): a for a in accs if sanitize_session_name(a.get("session", ""))}
 
     for f in files:
         if not f or not f.filename or not f.filename.endswith(".session"):
             continue
         raw_name = os.path.splitext(os.path.basename(f.filename))[0]
-        s_name = sanitize_session_name(raw_name)
-        if not s_name:
-            continue
+        raw_sanitized = sanitize_session_name(raw_name) or "session"
 
-        data_target = os.path.join(DATA_DIR, f"{s_name}.session")
-        base_target = os.path.join(BASE_DIR, f"{s_name}.session")
-        f.save(data_target)
+        tmp_base = os.path.join(TMP_SESSION_DIR, f"up_{uuid.uuid4().hex[:10]}")
+        tmp_file = f"{tmp_base}.session"
+        f.save(tmp_file)
         try:
-            shutil.copy2(data_target, base_target)
-        except Exception:
-            pass
+            ok, phone, first_name = run_tg(
+                _verify_uploaded_session_path(tmp_base, raw_sanitized, api_id, api_hash, bind_ip),
+                timeout=25,
+            )
+            if not ok:
+                continue
 
-        ok, phone, _ = run_tg(_verify_uploaded_session(s_name, api_id, api_hash, bind_ip), timeout=25)
-        if ok:
+            base_candidate = raw_sanitized or sanitize_session_name(first_name) or "session"
+            s_name = allocate_unique_session_name(
+                base_candidate,
+                list(accs_map.values()),
+                phone=phone,
+                check_disk=True,
+            )
+            norm_p = _normalize_phone(phone)
+            if len(norm_p) >= 7:
+                for old_k in [k for k, v in list(accs_map.items()) if _normalize_phone(v.get("phone", "")) == norm_p]:
+                    if old_k.lower() != s_name.lower():
+                        accs_map.pop(old_k, None)
+                        _remove_session_files(old_k)
+
+            data_target = os.path.join(DATA_DIR, f"{s_name}.session")
+            base_target = os.path.join(BASE_DIR, f"{s_name}.session")
+            shutil.copy2(tmp_file, data_target)
+            try:
+                shutil.copy2(data_target, base_target)
+            except Exception:
+                pass
+
             dev_info = get_device_fingerprint(s_name)
             accs_map[s_name] = {
                 "session": s_name,
@@ -1322,13 +1423,8 @@ def upload_session_route():
                 "ping": "-",
                 "added_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
             }
-        else:
-            for p in [data_target, base_target]:
-                if os.path.exists(p):
-                    try:
-                        os.remove(p)
-                    except Exception:
-                        pass
+        finally:
+            cleanup_temp_web_session(tmp_base)
 
     save_accounts(list(accs_map.values()))
     return redirect("/")
@@ -1496,10 +1592,11 @@ async def _do_finish(client: TelegramClient, phone: str, code: str, code_hash: s
 def start_phone_login():
     phone = request.form.get("phone", "").strip().replace(" ", "").replace("-", "")
     raw_session_name = request.form.get("session_name", "").strip()
-    session_name = sanitize_session_name(raw_session_name)
-    if not session_name:
-        clean_phone = re.sub(r"[^0-9]", "", phone)
-        session_name = f"acc_{clean_phone[-4:] if len(clean_phone) >= 4 else 'new'}"
+    requested_name = sanitize_session_name(raw_session_name)
+    custom_name_given = bool(requested_name)
+    clean_phone = _normalize_phone(phone)
+    seed_name = requested_name or f"acc_{clean_phone[-4:] if len(clean_phone) >= 4 else 'new'}"
+    session_name = allocate_unique_session_name(seed_name, phone="", check_disk=True)
 
     settings = load_settings()
     use_custom = bool(request.form.get("use_custom_api"))
@@ -1534,6 +1631,8 @@ def start_phone_login():
         login_sessions[session_name] = {
             "client": client,
             "session_name": session_name,
+            "requested_name": requested_name,
+            "custom_name_given": custom_name_given,
             "phone": phone,
             "api_id": api_id,
             "api_hash": api_hash,
@@ -1623,19 +1722,37 @@ def finish_phone_login():
 
     del login_sessions[session_name]
 
-    final_name = session_name
-    if session_name.startswith("acc_") and me and me.first_name:
-        clean_first = sanitize_session_name(me.first_name)
-        if clean_first:
-            final_name = clean_first
-            for ext in [".session", ".session-journal"]:
-                s_old = os.path.join(DATA_DIR, f"{session_name}{ext}")
-                s_new = os.path.join(DATA_DIR, f"{final_name}{ext}")
-                if os.path.exists(s_old):
-                    try:
-                        shutil.move(s_old, s_new)
-                    except Exception:
-                        pass
+    accs = load_accounts()
+    if not data.get("custom_name_given") and me and getattr(me, "first_name", None):
+        desired_base = sanitize_session_name(me.first_name) or session_name
+    elif data.get("requested_name"):
+        desired_base = data["requested_name"]
+    else:
+        desired_base = session_name
+
+    final_name = allocate_unique_session_name(
+        desired_base,
+        accs,
+        phone=data["phone"],
+        check_disk=True,
+        ignore_sessions={session_name},
+    )
+
+    if final_name != session_name:
+        for ext in [".session", ".session-journal", ".session-wal", ".session-shm"]:
+            s_old = os.path.join(DATA_DIR, f"{session_name}{ext}")
+            s_new = os.path.join(DATA_DIR, f"{final_name}{ext}")
+            if os.path.exists(s_old):
+                try:
+                    shutil.move(s_old, s_new)
+                except Exception:
+                    pass
+            b_old = os.path.join(BASE_DIR, f"{session_name}{ext}")
+            if os.path.exists(b_old):
+                try:
+                    os.remove(b_old)
+                except Exception:
+                    pass
 
     for ext in [".session", ".session-journal"]:
         src = os.path.join(DATA_DIR, f"{final_name}{ext}")
@@ -1647,8 +1764,19 @@ def finish_phone_login():
                 pass
 
     dev_info = get_device_fingerprint(final_name, data.get("device_info"))
-    accs = load_accounts()
-    accs = [a for a in accs if sanitize_session_name(a.get("session", "")) != final_name]
+    norm_p = _normalize_phone(data["phone"])
+    kept_accs = []
+    for a in accs:
+        a_sess = sanitize_session_name(a.get("session", ""))
+        a_phone = _normalize_phone(a.get("phone", ""))
+        if a_sess.lower() == final_name.lower():
+            continue
+        if len(norm_p) >= 7 and a_phone == norm_p:
+            if a_sess and a_sess.lower() != final_name.lower():
+                _remove_session_files(a_sess)
+            continue
+        kept_accs.append(a)
+    accs = kept_accs
     accs.append({
         "session": final_name,
         "phone": data["phone"],
@@ -2476,7 +2604,14 @@ def restore_acc():
 
     if target:
         accs = load_accounts()
-        accs = [a for a in accs if sanitize_session_name(a.get("session", "")) != sess_name]
+        final_name = allocate_unique_session_name(
+            sess_name,
+            accs,
+            phone=target.get("phone", ""),
+            check_disk=True,
+        )
+        accs = [a for a in accs if sanitize_session_name(a.get("session", "")).lower() != final_name.lower()]
+        target["session"] = final_name
         target.pop("trash_reason", None)
         target.pop("deleted_at", None)
         accs.append(target)
@@ -2486,7 +2621,7 @@ def restore_acc():
             t_dir = os.path.join(base, "trash")
             for ext in [".session", ".session-journal", ".session-wal", ".session-shm"]:
                 src = os.path.join(t_dir, f"{sess_name}{ext}")
-                dst = os.path.join(base, f"{sess_name}{ext}")
+                dst = os.path.join(base, f"{final_name}{ext}")
                 if os.path.exists(src):
                     try:
                         shutil.move(src, dst)
